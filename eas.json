@@ -13,19 +13,41 @@
             },
             "channel": "development"
         },
+        "local": {
+            "distribution": "internal",
+            "android": {
+                "buildType": "apk"
+            },
+            "channel": "preview",
+            "env": {
+                "EXPO_PUBLIC_ENV": "development",
+                "EXPO_PUBLIC_SERVER_URL": "http://192.168.1.87:3003",
+                "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+            }
+        },
         "preview": {
             "distribution": "internal",
             "android": {
                 "buildType": "apk"
             },
-            "channel": "preview"
+            "channel": "preview",
+            "env": {
+                "EXPO_PUBLIC_ENV": "production",
+                "EXPO_PUBLIC_SERVER_URL": "https://chalokhelne.com",
+                "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+            }
         },
         "production": {
             "android": {
                 "buildType": "app-bundle",
                 "autoIncrement": true
             },
-            "channel": "production"
+            "channel": "production",
+            "env": {
+                "EXPO_PUBLIC_ENV": "production",
+                "EXPO_PUBLIC_SERVER_URL": "https://chalokhelne.com",
+                "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+            }
         }
     }
 }

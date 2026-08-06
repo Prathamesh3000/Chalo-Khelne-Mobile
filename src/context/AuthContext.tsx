@@ -1,0 +1,733 @@
+import React, { createContext, useState, useEffect, useContext, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import AUTH from "../api/auth";
+import NotificationService from "../services/NotificationService";
+import tokenStore from "../services/tokenStore";
+import {
+  setAuthHeader,
+  performRefresh,
+  attachAuthInterceptors,
+  setGlobalLogout,
+} from "../services/http";
+
+// The global axios auth + refresh-token flow now lives in `services/http`.
+// AuthContext just wires the logout callback and attaches the interceptors
+// (see the init effect below), and calls setAuthHeader/performRefresh from there.
+
+// User objects carry many dynamic, server-shaped fields; keep the type broad
+// (common fields spelled out) with an index signature for the rest.
+export interface AuthUser {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  staffRole?: string;
+  roles?: string[];
+  dateOfBirth?: string;
+  sex?: string;
+  [key: string]: any;
+}
+
+export interface AuthSession {
+  id: string;
+  token?: string;
+  refreshToken?: string | null;
+  user?: AuthUser;
+  [key: string]: any;
+}
+
+export interface AuthContextValue {
+  user: AuthUser | null;
+  token: string | null;
+  loading: boolean;
+  isInitializing: boolean;
+  error: string | null;
+  register: (userData: any) => Promise<any>;
+  login: (credentials: any) => Promise<any>;
+  logout: () => Promise<void>;
+  updateProfile: (userId: string, profileData: any, profileType?: string) => Promise<any>;
+  updateUser: (updatedUser: AuthUser, newToken?: string | null) => Promise<void>;
+  forgotPassword: (email: string) => Promise<any>;
+  resetPassword: (data: { email: string; otp: string; newPassword: string }) => Promise<any>;
+  googleLogin: (data: any) => Promise<any>;
+  isAuthenticated: boolean;
+  isPlayer: boolean;
+  isTrainer: boolean;
+  isReferee: boolean;
+  sessions: AuthSession[];
+  activeSessionId: string | null;
+  addAccount: (credentials: any) => Promise<AuthUser>;
+  switchAccount: (id: string) => Promise<AuthUser>;
+  refreshSessions: () => Promise<void>;
+}
+
+const USER_KEY = "auth_user";
+
+// Create the context with default values (fallback only — the app is always
+// wrapped in AuthProvider).
+const AuthContext = createContext<AuthContextValue>({
+  user: null,
+  token: null,
+  loading: false,
+  isInitializing: true,
+  error: null,
+  isAuthenticated: false,
+  isPlayer: false,
+  isTrainer: false,
+  isReferee: false,
+  sessions: [],
+  activeSessionId: null,
+  register: async () => {},
+  login: async () => {},
+  logout: async () => {},
+  updateProfile: async () => {},
+  updateUser: async () => {},
+  forgotPassword: async () => {},
+  resetPassword: async () => {},
+  googleLogin: async () => {},
+  addAccount: async () => ({}) as AuthUser,
+  switchAccount: async () => ({}) as AuthUser,
+  refreshSessions: async () => {},
+});
+
+// Custom hook to use the auth context
+export const useAuth = (): AuthContextValue => {
+  return useContext(AuthContext);
+};
+
+// Helper functions for storage operations
+const Storage = {
+  // Token operations — backed by SecureStore via tokenStore (Phase 3b)
+  async storeToken(token: string) {
+    try {
+      await tokenStore.setToken(token);
+    } catch (error) {
+      console.error("Error storing token", error);
+    }
+  },
+
+  async getToken(): Promise<string | null> {
+    try {
+      return await tokenStore.getToken();
+    } catch (error) {
+      console.error("Error getting token", error);
+      return null;
+    }
+  },
+
+  // User operations
+  async storeUser(user: AuthUser) {
+    try {
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+    } catch (error) {
+      console.error("Error storing user", error);
+    }
+  },
+
+  async getUser(): Promise<AuthUser | null> {
+    try {
+      const userData = await AsyncStorage.getItem(USER_KEY);
+      return userData ? JSON.parse(userData) : null;
+    } catch (error) {
+      console.error("Error getting user", error);
+      return null;
+    }
+  },
+
+  // Clear storage
+  async clear() {
+    try {
+      await tokenStore.clearToken();
+      await tokenStore.clearRefreshToken();
+      await AsyncStorage.removeItem(USER_KEY);
+    } catch (error) {
+      console.error("Error clearing storage", error);
+    }
+  },
+};
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  // Account switcher — the list of remembered accounts + which one is active.
+  const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
+
+  // Stable account id for a user object (works for both id and _id shapes).
+  const sidOf = (u?: AuthUser | null) => String(u?.id || u?._id || "");
+
+  // Pull the saved-account list + active id into React state for the UI.
+  const refreshSessions = useCallback(async () => {
+    try {
+      const [list, activeId] = await Promise.all([
+        tokenStore.getSessions(),
+        tokenStore.getActiveSessionId(),
+      ]);
+      setSessions(list);
+      setActiveSessionIdState(activeId);
+    } catch (e) {
+      console.warn("Could not load saved accounts:", e);
+    }
+  }, []);
+
+  // Remember the just-authenticated account and mark it active. Tokens go to
+  // SecureStore (per account); the active one stays mirrored to the canonical
+  // keys so the rest of the app is unaffected.
+  const rememberSession = useCallback(
+    async ({ token: tk, refreshToken, user: u }: { token?: string; refreshToken?: string | null; user?: AuthUser }) => {
+      const id = sidOf(u);
+      if (!id) return;
+      await tokenStore.upsertSession({ id, token: tk, refreshToken, user: u });
+      await tokenStore.setActiveSessionId(id);
+      await refreshSessions();
+    },
+    [refreshSessions]
+  );
+
+  // Load user from storage on mount
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        setIsInitializing(true);
+        setLoading(true);
+        let storedToken = await Storage.getToken();
+        const storedUser = await Storage.getUser();
+
+        if (storedToken && storedUser) {
+          // If the (1h) access token is expired, try to refresh it before
+          // giving up — only log out if there's no valid refresh token.
+          try {
+            const parts = storedToken.split(".");
+            if (parts.length === 3) {
+              const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+              if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+                try {
+                  storedToken = await performRefresh();
+                  console.log("[AUTH] Access token refreshed on startup");
+                } catch (refreshErr) {
+                  console.log("[AUTH] Access expired and refresh failed, clearing...");
+                  await Storage.clear();
+                  setUser(null);
+                  setToken(null);
+                  setIsInitializing(false);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          } catch {}
+
+          // Try to fetch fresh user data from server
+          try {
+            const response = await fetch(AUTH.ENDPOINTS.CURRENT_USER, {
+              headers: {
+                Authorization: `Bearer ${storedToken}`,
+                "Content-Type": "application/json",
+              },
+              timeout: 10000,
+            } as RequestInit & { timeout?: number });
+
+            if (response.status === 401) {
+              // Token rejected by server — clear and logout
+              console.log("[AUTH] Token rejected by server (401), logging out...");
+              await Storage.clear();
+              setUser(null);
+              setToken(null);
+              setIsInitializing(false);
+              setLoading(false);
+              return;
+            }
+
+            if (response.ok) {
+              const freshUser = await response.json();
+              await Storage.storeUser(freshUser);
+              setUser(freshUser);
+              NotificationService.registerPushTokenForNewUser(freshUser.id || freshUser._id);
+            } else {
+              setUser(storedUser);
+              NotificationService.registerPushTokenForNewUser(storedUser.id || storedUser._id);
+            }
+          } catch (fetchError) {
+            console.warn("Could not fetch fresh user data, using stored user:", fetchError);
+            setUser(storedUser);
+            NotificationService.registerPushTokenForNewUser(storedUser.id || storedUser._id);
+          }
+          setToken(storedToken);
+        } else {
+          setUser(null);
+          setToken(null);
+          await Storage.clear();
+        }
+      } catch (err) {
+        console.error("Error loading user:", err);
+        await Storage.clear();
+        setUser(null);
+        setToken(null);
+      } finally {
+        // Make sure the currently-active login is represented in the account
+        // switcher (covers users who were logged in before this feature shipped).
+        try {
+          const t = await Storage.getToken();
+          const u = await Storage.getUser();
+          const id = sidOf(u);
+          if (t && id) {
+            const existing = await tokenStore.getSessions();
+            if (!existing.find((s: AuthSession) => String(s.id) === id)) {
+              const rt = await tokenStore.getRefreshToken();
+              await tokenStore.upsertSession({ id, token: t, refreshToken: rt, user: u });
+            }
+            await tokenStore.setActiveSessionId(id);
+          }
+        } catch (_) {}
+        await refreshSessions();
+        setIsInitializing(false);
+        setLoading(false);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  // API request helper
+  const apiRequest = async (
+    endpoint: string,
+    method: string,
+    data: any = null,
+    requiresAuth = false
+  ): Promise<any> => {
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+
+      if (requiresAuth) {
+        const authToken = await Storage.getToken();
+        if (!authToken) throw new Error("Authentication required");
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
+      const config = {
+        method,
+        headers,
+        body: data ? JSON.stringify(data) : undefined,
+        // Add timeout to prevent hanging requests
+        timeout: 10000,
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+      try {
+        const response = await fetch(endpoint, {
+          ...config,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        const responseData = await response.json();
+
+        // If the response is not ok, throw the specific error from the server
+        if (!response.ok) {
+          throw new Error(
+            responseData.error ||
+            responseData.message ||
+            `Server error: ${response.status}`
+          );
+        }
+
+        return responseData;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+          throw new Error("Request timed out. Please check your internet connection.");
+        }
+        throw err;
+      }
+    } catch (err) {
+      // Rethrow the error to be handled by the calling function
+      throw err;
+    }
+  };
+
+  const updateUser = async (updatedUser: AuthUser, newToken: string | null = null) => {
+    if (!updatedUser) return;
+
+    try {
+      await Storage.storeUser(updatedUser);
+      setUser(updatedUser);
+
+      if (newToken) {
+        await Storage.storeToken(newToken);
+        setToken(newToken);
+      }
+    } catch (err) {
+      console.error("Error updating user in context:", err);
+    }
+  };
+
+  // Register a new user
+  const register = async (userData: any) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiRequest(AUTH.ENDPOINTS.REGISTER, "POST", userData);
+
+      // Don't automatically log in after registration
+      // Just return the response data for the UI to handle
+      if (data) {
+        // Still register for push notifications if needed
+        try {
+          if (data.user && (data.user.id || data.user._id)) {
+            await NotificationService.registerPushTokenForNewUser(data.user.id || data.user._id);
+          }
+        } catch (notifError) {
+          console.error("Error registering for notifications:", notifError);
+          // Don't fail registration if push notification registration fails
+        }
+      }
+
+      return data;
+    } catch (err: any) {
+      setError(err.message || "Registration failed");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Log in an existing user
+  const login = async (credentials: any) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiRequest(AUTH.ENDPOINTS.LOGIN, "POST", credentials);
+
+      if (data.error || data.message) {
+        // Handle server errors that come in a structured format
+        throw new Error(data.error || data.message);
+      }
+
+      if (!data || !data.token || !data.user) {
+        throw new Error("Invalid response from server");
+      }
+
+      await Storage.storeToken(data.token);
+      if (data.refreshToken) await tokenStore.setRefreshToken(data.refreshToken);
+      await Storage.storeUser(data.user);
+      setUser(data.user);
+      setToken(data.token);
+      // Remember this account in the switcher.
+      await rememberSession({ token: data.token, refreshToken: data.refreshToken, user: data.user });
+
+      // Check if logged-in user already has a push token
+      // If not, register one for them
+      try {
+        await NotificationService.registerPushTokenForNewUser(data.user.id || data.user._id);
+      } catch (notifError) {
+        console.error("Error registering for notifications:", notifError);
+        // Don't fail login if push registration fails
+      }
+
+      return data;
+    } catch (err: any) {
+      // Clear any partial auth state to ensure we stay in the current navigator
+      // This ensures failed login attempts don't trigger navigation changes
+      setUser(null);
+      setToken(null);
+
+      setError(err.message || "Login failed");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const googleLogin = async (data: any) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const responseData = await apiRequest(
+        AUTH.ENDPOINTS.GOOGLE_LOGIN,
+        "POST",
+        data
+      );
+
+      if (!responseData?.token || !responseData?.user?._id) {
+        throw new Error("Invalid response from server");
+      }
+
+      await Storage.storeToken(responseData.token);
+      if (responseData.refreshToken) await tokenStore.setRefreshToken(responseData.refreshToken);
+      await Storage.storeUser(responseData.user);
+
+      setUser(responseData.user);
+      setToken(responseData.token);
+      // Remember this account in the switcher.
+      await rememberSession({ token: responseData.token, refreshToken: responseData.refreshToken, user: responseData.user });
+
+      // Optional – never block login
+      try {
+        await NotificationService.registerPushTokenForNewUser(
+          responseData.user._id
+        );
+      } catch (e) {
+        console.warn("Push token registration skipped:", e);
+      }
+
+      return responseData;
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err.message ||
+        "Google login failed";
+
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Make a remembered account the active one by mirroring its saved token/user
+  // into the canonical keys the whole app reads. No network, no re-login — the
+  // navigator re-renders for the new account's role automatically.
+  const applyActiveSession = useCallback(
+    async (session: AuthSession) => {
+      if (!session || !session.token || !session.user) {
+        throw new Error("That account needs to sign in again.");
+      }
+      await Storage.storeToken(session.token);
+      if (session.refreshToken) await tokenStore.setRefreshToken(session.refreshToken);
+      else await tokenStore.clearRefreshToken();
+      await Storage.storeUser(session.user);
+      await tokenStore.setActiveSessionId(sidOf(session.user));
+      setToken(session.token);
+      setUser(session.user);
+      setAuthHeader(session.token);
+      await refreshSessions();
+      try {
+        await NotificationService.registerPushTokenForNewUser(sidOf(session.user));
+      } catch (e) {
+        console.warn("Push token registration skipped on switch:", e);
+      }
+    },
+    [refreshSessions]
+  );
+
+  // Switch to an already-remembered account (the one-tap path).
+  const switchAccount = useCallback(
+    async (id: string) => {
+      setLoading(true);
+      try {
+        // applyActiveSession throws if the session is missing/invalid.
+        const session = (await tokenStore.getSession(id)) as AuthSession;
+        await applyActiveSession(session);
+        return session.user as AuthUser;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyActiveSession]
+  );
+
+  // Add ANOTHER account (e.g. the school-coach login) WITHOUT logging out of the
+  // current one, then switch into it. On failure the current session is left
+  // completely untouched — unlike login(), which clears state on error.
+  const addAccount = useCallback(
+    async (credentials: any) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiRequest(AUTH.ENDPOINTS.LOGIN, "POST", credentials);
+        if (!data || !data.token || !data.user) {
+          throw new Error(data?.error || data?.message || "Invalid response from server");
+        }
+        await tokenStore.upsertSession({
+          id: sidOf(data.user), token: data.token, refreshToken: data.refreshToken, user: data.user,
+        });
+        await applyActiveSession({
+          id: sidOf(data.user), token: data.token, refreshToken: data.refreshToken, user: data.user,
+        });
+        return data.user;
+      } catch (err: any) {
+        setError(err.message || "Could not add account");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyActiveSession]
+  );
+
+  // Log out — forget ONLY the active account. If another remembered account
+  // remains, switch to it instead of dropping the user to the login screen.
+  const logout = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Best-effort server-side revoke of the refresh token (kill-switch).
+      try {
+        const rt = await tokenStore.getRefreshToken();
+        if (rt) {
+          await fetch(AUTH.ENDPOINTS.LOGOUT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refreshToken: rt }),
+          });
+        }
+      } catch (revokeErr) {
+        // Ignore — the local clear below still logs the user out.
+      }
+
+      // Drop the current account from the remembered list.
+      const currentId = sidOf(user) || (await tokenStore.getActiveSessionId());
+      let remaining: AuthSession[] = [];
+      try {
+        remaining = currentId ? await tokenStore.removeSession(currentId) : await tokenStore.getSessions();
+      } catch (_) {}
+
+      if (remaining && remaining.length > 0) {
+        // Fall back to another signed-in account instead of the login screen.
+        const next = await tokenStore.getSession(remaining[0].id);
+        if (next && next.token) {
+          await applyActiveSession(next);
+          return;
+        }
+      }
+
+      // No other account — full clear (original behaviour).
+      await Storage.clear();
+      await tokenStore.setActiveSessionId(null);
+      setUser(null);
+      setToken(null);
+      await refreshSessions();
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, applyActiveSession, refreshSessions]);
+
+  // Wire the logout fallback into the global bare-axios interceptor (services/http)
+  // and attach the interceptors once.
+  useEffect(() => {
+    setGlobalLogout(logout);
+    attachAuthInterceptors();
+  }, [logout]);
+
+  // Keep the global axios Authorization header in sync with auth state, so every
+  // bare-axios call across the app carries the token (and it clears on logout).
+  useEffect(() => {
+    setAuthHeader(token);
+  }, [token]);
+
+  // Update profile (works for all user types)
+  const updateProfile = async (userId: string, profileData: any, profileType = "user") => {
+    setLoading(true);
+    setError(null);
+    try {
+      let endpoint;
+
+      // Determine endpoint based on profile type
+      switch (profileType) {
+        case "trainer":
+          endpoint = AUTH.ENDPOINTS.TRAINER.PROFILE(userId);
+          break;
+        case "referee":
+          endpoint = AUTH.ENDPOINTS.REFEREE.PROFILE(userId);
+          break;
+        default:
+          endpoint = AUTH.ENDPOINTS.USER.PROFILE(userId);
+      }
+
+      const data = await apiRequest(endpoint, "PUT", profileData, true);
+
+      // Update user state if it's the main user profile
+      if (profileType === "user" && data && data.user) {
+        const updatedUser = { ...user, ...data.user };
+        await Storage.storeUser(updatedUser);
+        setUser(updatedUser);
+      }
+
+      return data;
+    } catch (err: any) {
+      setError(err.message || `${profileType} profile update failed`);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Forgot password — send OTP (does NOT use global loading to avoid blocking reset form)
+  const forgotPassword = async (email: string) => {
+    setError(null);
+    try {
+      const response = await apiRequest(`${AUTH.BASE_URL}/email/forgot-password/send-otp`, "POST", {
+        email,
+      });
+      return { success: true, ...response };
+    } catch (err: any) {
+      setError(err.message || "Password reset request failed");
+      throw err;
+    }
+  };
+
+  // Reset password with OTP — verify then reset in sequence
+  const resetPassword = async (data: { email: string; otp: string; newPassword: string }) => {
+    setError(null);
+    try {
+      // 1. Verify OTP first
+      await apiRequest(`${AUTH.BASE_URL}/email/forgot-password/verify-otp`, "POST", {
+        email: data.email,
+        otp: data.otp,
+      });
+      // 2. Reset password if OTP matched and verified
+      return await apiRequest(`${AUTH.BASE_URL}/email/forgot-password/reset`, "POST", {
+        email: data.email,
+        newPassword: data.newPassword,
+      });
+    } catch (err: any) {
+      setError(err.message || "Password reset failed");
+      throw err;
+    }
+  };
+
+  // Role-specific helper methods
+  const isPlayer = !!(user && user.role === "Player");
+  const isTrainer = !!(user && user.role === "Trainer");
+  const isReferee = !!(user && user.role === "Referee");
+
+  const value: AuthContextValue = {
+    user,
+    token,
+    loading,
+    isInitializing,
+    error,
+    register,
+    login,
+    logout,
+    updateProfile,
+    updateUser,
+    forgotPassword,
+    resetPassword,
+    googleLogin,
+    isAuthenticated: !!user,
+    isPlayer,
+    isTrainer,
+    isReferee,
+    // Account switcher
+    sessions,
+    activeSessionId,
+    addAccount,
+    switchAccount,
+    refreshSessions,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export default AuthContext;

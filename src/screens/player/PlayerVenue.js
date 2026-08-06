@@ -108,7 +108,10 @@ const PlayerVenue = ({ navigation }) => {
   // ─── Fetchers ─────────────────────────────────────────────────────────
   const fetchTurfs = async () => {
     try {
-      const response = await authFetch(API.ENDPOINTS.TURFS.BASE);
+      // The list endpoint paginates (default 10, newest-first) — without a high
+      // limit older turfs are silently cut off. Request a large page so every
+      // active turf loads on this browse screen.
+      const response = await authFetch(`${API.ENDPOINTS.TURFS.BASE}?limit=500`);
       const data = await response.json();
       const turfData = data.turfs || data || [];
       if (Array.isArray(turfData)) setTurfs(turfData);

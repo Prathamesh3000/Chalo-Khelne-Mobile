@@ -26,6 +26,7 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../context/AuthContext";
 import JOBS from "../../api/jobs";
+import API from "../../api/api";
 
 const ROLE_LABELS = {
   referee: "Referee",
@@ -624,6 +625,31 @@ const BrowseJobs = () => {
     }
   }, [userId]);
 
+  // Upcoming + live tournaments to apply to as staff (referee/scorer/etc.).
+  // Same "open for jobs" rule as BrowseTournamentJobs — hide only ended/completed.
+  const [tournaments, setTournaments] = useState([]);
+  const fetchTournaments = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API.BASE_URL}/tournaments`);
+      const list = Array.isArray(res.data) ? res.data : res.data?.tournaments || [];
+      const now = new Date();
+      setTournaments(
+        list.filter((t) => {
+          if (t.currentStage === "completed") return false;
+          const endRaw = t.endDate || t.startDate;
+          if (endRaw) {
+            const end = new Date(endRaw);
+            end.setHours(23, 59, 59, 999);
+            if (end < now) return false;
+          }
+          return true;
+        })
+      );
+    } catch (e) {
+      // Non-fatal — the tournaments section just stays empty.
+    }
+  }, []);
+
   const reloadAll = useCallback(() => {
     setLoadError(false);
     fetchJobs();
@@ -631,7 +657,8 @@ const BrowseJobs = () => {
     fetchRequests();
     fetchDashboard();
     fetchMyProfiles();
-  }, [fetchJobs, fetchApplications, fetchRequests, fetchDashboard, fetchMyProfiles]);
+    fetchTournaments();
+  }, [fetchJobs, fetchApplications, fetchRequests, fetchDashboard, fetchMyProfiles, fetchTournaments]);
 
   useFocusEffect(useCallback(() => { reloadAll(); }, [reloadAll]));
   const [activateConfirmProfile, setActivateConfirmProfile] = useState(null);
@@ -1597,6 +1624,44 @@ const BrowseJobs = () => {
                   </TouchableOpacity>
                 </View>
               ))}
+            </View>
+          )}
+
+          {/* Tournaments — apply to officiate (referee/scorer/etc.) */}
+          {tournaments.length > 0 && (
+            <View style={{ marginTop: 4, marginBottom: 10 }}>
+              <Text style={{ fontSize: 15, fontWeight: "800", color: "#1F2937", marginBottom: 8, paddingHorizontal: 2 }}>
+                Tournaments — apply to officiate
+              </Text>
+              {tournaments
+                .filter((t) => !search || (t.title || "").toLowerCase().includes(search.toLowerCase()))
+                .map((t) => {
+                  const sportNames = Array.isArray(t.sports)
+                    ? t.sports.map((s) => s.sportName).filter(Boolean).join(", ")
+                    : "";
+                  const dateLabel = t.startDate ? new Date(t.startDate).toLocaleDateString() : "";
+                  return (
+                    <TouchableOpacity
+                      key={t._id}
+                      activeOpacity={0.85}
+                      onPress={() => navigation.navigate("BrowseTournamentJobsHome", { focusTournamentId: t._id })}
+                      style={{ backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#EEF0F2", padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                    >
+                      <View style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
+                        <Text numberOfLines={1} style={{ fontSize: 14.5, fontWeight: "800", color: "#111827" }}>
+                          {t.title || "Tournament"}
+                        </Text>
+                        <Text numberOfLines={1} style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
+                          {[sportNames, dateLabel].filter(Boolean).join(" · ") || "Open for staff"}
+                        </Text>
+                      </View>
+                      <View style={{ backgroundColor: "#15A765", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, flexDirection: "row", alignItems: "center" }}>
+                        <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 12.5 }}>Apply</Text>
+                        <Ionicons name="chevron-forward" size={14} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
             </View>
           )}
 

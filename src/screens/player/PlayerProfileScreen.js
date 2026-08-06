@@ -323,7 +323,19 @@ const PlayerProfileScreen = () => {
 
         {/* Performance card */}
         <View style={styles.perfCard}>
-          <Text style={styles.perfTitle}>My Performance</Text>
+          <View style={styles.perfHeader}>
+            <Text style={styles.perfTitle}>My Performance</Text>
+            {hasAnyStats && (
+              <TouchableOpacity
+                style={styles.perfLink}
+                onPress={() => navigation.navigate("TournamentHistory")}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.perfLinkText}>Full History</Text>
+                <Ionicons name="chevron-forward" size={14} color={GREEN} />
+              </TouchableOpacity>
+            )}
+          </View>
 
           {hasAnyStats ? (
             <>
@@ -641,11 +653,27 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
   },
+  perfHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   perfTitle: {
     fontSize: 15,
     fontFamily: "Montserrat_600SemiBold",
     fontWeight: "700",
     color: GREEN_DARK,
+  },
+  perfLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  perfLinkText: {
+    fontSize: 13,
+    fontFamily: "Montserrat_600SemiBold",
+    fontWeight: "700",
+    color: GREEN,
   },
   perfSport: {
     paddingHorizontal: 14,

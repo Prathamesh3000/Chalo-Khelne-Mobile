@@ -7,6 +7,7 @@ WebBrowser.maybeCompleteAuthSession();
 import { StatusBar, BackHandler, Platform, ToastAndroid } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppNavigator from "./src/navigation/AppNavigator";
+import DobGate from "./src/components/DobGate";
 import { AuthProvider } from "./src/context/AuthContext";
 import { OnboardingProvider } from "./src/context/OnboardingContext";
 import { ChatProvider } from "./src/context/ChatContext";
@@ -111,6 +112,9 @@ function App() {
                 <NavigationContainer linking={linking} ref={navigationRef}>
                   <StatusBar style="auto" />
                   <AppNavigator />
+                  {/* Families Policy age gate — renders over everything when
+                      the signed-in account has no known date of birth. */}
+                  <DobGate />
                 </NavigationContainer>
               </OnboardingProvider>
             </ChatProvider>

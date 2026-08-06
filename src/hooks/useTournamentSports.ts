@@ -1,0 +1,107 @@
+import { useEffect, useState } from "react";
+import axios from "axios";
+import tournamentConfig from "../api/tournaments";
+import type { SportTrack } from "../utils/sportTrack";
+
+interface SeedTournament {
+  sports?: SportTrack[];
+  [key: string]: unknown;
+}
+
+interface UseTournamentSportsResult {
+  sports: SportTrack[];
+  activeSportId: string | null;
+  setActiveSportId: React.Dispatch<React.SetStateAction<string | null>>;
+  loading: boolean;
+}
+
+// Loads tournament.sports[] for a tournamentId. Prefers a tournament
+// object passed in (e.g. from route params) when it already carries
+// sports[]; otherwise fetches BY_ID.
+//
+// Contract:
+// - `activeSportId` is null until sports[] is loaded. Callers must
+//   skip per-sport fetches while it is null so the initial request
+//   does NOT carry a partial / wrong sportId. Once sports arrive, the
+//   first entry is selected automatically.
+// - `setActiveSportId` lets the caller switch sports.
+export default function useTournamentSports(
+  tournamentId?: string | null,
+  seedTournament?: SeedTournament | null
+): UseTournamentSportsResult {
+  const [sports, setSports] = useState<SportTrack[] | null>(() => {
+    if (Array.isArray(seedTournament?.sports) && seedTournament.sports.length > 0) {
+      return seedTournament.sports;
+    }
+    return null;
+  });
+  const [activeSportId, setActiveSportId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const sportKey = (s: SportTrack | undefined): string =>
+      String(s?.sportId || s?._id || s?.id || "");
+    const seedFromArray = (arr: SportTrack[]) => {
+      if (cancelled) return;
+      setSports(arr);
+      // Preserve a still-valid selection (e.g. set from a partial seed or the
+      // user's pick); otherwise default to the first sport. Avoids resetting
+      // the chosen sport when the authoritative list arrives.
+      setActiveSportId((cur) => {
+        if (cur && Array.isArray(arr) && arr.some((s) => sportKey(s) === String(cur))) return cur;
+        const first = arr?.[0];
+        return first ? (sportKey(first) || null) : null;
+      });
+      setLoading(false);
+    };
+
+    // Seed instantly for first paint, but DON'T stop here — a partial /
+    // normalised seed (e.g. 1 sport from a card shape) would otherwise hide the
+    // multi-sport switcher. We still fetch BY_ID below for the authoritative
+    // sports[] and upgrade the list.
+    if (Array.isArray(seedTournament?.sports) && seedTournament.sports.length > 0) {
+      seedFromArray(seedTournament.sports);
+    }
+
+    if (!tournamentId) {
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    setLoading(true);
+    axios
+      .get(tournamentConfig.ENDPOINTS.BY_ID(tournamentId))
+      .then((res) => {
+        if (cancelled) return;
+        const t = res?.data?.tournament || res?.data || {};
+        const arr: SportTrack[] = Array.isArray(t.sports) ? t.sports : [];
+        if (arr.length > 0) {
+          seedFromArray(arr);
+        } else {
+          // Legacy single-sport tournament — no sports[]. Strip stays
+          // hidden (sports.length <= 1) and activeSportId stays null
+          // so callers don't append sportId= to legacy endpoints.
+          setSports([]);
+          setActiveSportId(null);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSports([]);
+        setActiveSportId(null);
+        setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [tournamentId, seedTournament]);
+
+  return {
+    sports: sports || [],
+    activeSportId,
+    setActiveSportId,
+    loading,
+  };
+}

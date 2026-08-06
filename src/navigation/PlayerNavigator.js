@@ -132,6 +132,14 @@ const HomeStack = () => {
         component={PlayerProfileScreen}
         options={{ headerShown: false }}
       />
+      {/* Career/history screen — registered here too so the "Full History"
+          link on PlayerProfileScreen works when profile is opened from the
+          Home stack (it also lives in ProfileStack). */}
+      <Stack.Screen
+        name="TournamentHistory"
+        component={TournamentHistory}
+        options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
+      />
       <Stack.Screen
         name="PlayerPublicProfile"
         component={PlayerPublicProfile}
@@ -425,6 +433,7 @@ const EventStack = () => {
         options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
       />
       <Stack.Screen name="BrowseTournamentJobsHome" component={BrowseTournamentJobs} options={{ headerShown: false }} />
+      <Stack.Screen name="BrowseJobs" component={BrowseJobs} options={{ headerShown: false, tabBarStyle: { display: "none" } }} />
       <Stack.Screen name="ServiceProfileSetupHome" component={ServiceProfileSetup} options={{ headerShown: false }} />
       <Stack.Screen name="RoleHubHome" component={RoleHub} options={{ headerShown: false }} />
     </Stack.Navigator>
@@ -659,6 +668,14 @@ const ProfileStack = () => {
         component={RefereeAssignmentsScreen}
         options={{ headerShown: false }}
       />
+      {/* Registered here too so RefereeMatchScorer's redirect to the canonical
+          Manual/Auto board works when the umpire opens a match from
+          "My Assignments" inside the Profile stack. */}
+      <Stack.Screen
+        name="TournamentLeaderboardDetail"
+        component={TournamentLeaderboardDetail}
+        options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
+      />
       <Stack.Screen
         name="RefereeMatchScorer"
         component={RefereeMatchScorer}
@@ -791,23 +808,40 @@ const StoreStack = () => {
   );
 };
 
+// The one root screen of each main tab where the bottom bar is allowed. The bar
+// shows ONLY on these five; every internal/nested screen hides it.
+const TAB_ROOT_SCREEN = {
+  Home: "PlayerHome",
+  Events: "EventScreen",
+  Social: "SocialHome",
+  Turf: "Play",
+  Store: "EquipmentHub",
+};
+
 // Custom Tab Bar component (friend's redesign — green pill style with descriptor-based hide)
 const CustomTabBar = ({ state, descriptors, navigation, insets }) => {
   const route = state.routes[state.index];
   const focusedOptions = descriptors[route.key].options;
 
-  // Show the tab bar EVERYWHERE by default; hide it only when the focused nested
-  // screen explicitly opts out via tabBarStyle: { display: 'none' } (React
-  // Navigation propagates the focused child's tabBarStyle up to here).
-  //
-  // The previous "backup whitelist" of allowed root-screen names was removed:
-  // getFocusedRouteNameFromRoute() is undefined right after a fresh mount (so a
-  // restart always showed the bar) but resolves to the real route name once the
-  // navigation state settles. Any screen not in that short whitelist then made
-  // this return null and UNMOUNT the whole bar — the intermittent
-  // "navbar disappears on Home after login" bug. Now the bar can't wrongly hide
-  // on a root screen, because roots never set display:'none'.
+  // Belt-and-suspenders: a screen may still force-hide via tabBarStyle.
   if (focusedOptions?.tabBarStyle?.display === "none") {
+    return null;
+  }
+
+  // The bar is visible ONLY on the five main tabs (Home / Events / Social /
+  // Turf / Store) and only when that stack is sitting on its root screen.
+  // Every internal page — and the hidden Chat/Profile tabs — hides it.
+  // This is opt-OUT-free: new nested screens hide the bar automatically, no
+  // per-screen tabBarStyle needed.
+  const rootScreen = TAB_ROOT_SCREEN[route.name];
+  if (!rootScreen) {
+    return null; // Chat, Profile, or any non-main tab
+  }
+  // getFocusedRouteNameFromRoute() is undefined while a stack shows its initial
+  // (root) route — treat undefined as "on the root → show". Any other nested
+  // route name means we've navigated into an internal page → hide.
+  const nestedRouteName = getFocusedRouteNameFromRoute(route);
+  if (nestedRouteName && nestedRouteName !== rootScreen) {
     return null;
   }
 

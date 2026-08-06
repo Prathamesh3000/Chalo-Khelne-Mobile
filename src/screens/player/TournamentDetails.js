@@ -526,13 +526,10 @@ const TournamentDetails = ({ route, navigation }) => {
   };
 
   const handleExploreJobs = () => {
-    navigation.navigate("BrowseTournamentJobsHome", {
-      preSelectedTournament: {
-        _id: tournament._id || tournament.id || tournamentId,
-        title: tournament.title || tournament.name,
-        sportsType: getSportName(tournament),
-      },
-    });
+    // Open the Sports Jobs & Opportunities hub (BrowseJobs) — it now lists
+    // upcoming/live tournaments under "Tournaments — apply to officiate", each
+    // with an Apply that deep-links into the role picker.
+    navigation.navigate("BrowseJobs");
   };
 
   // ─── Derived ─────────────────────────────────────────────────────────────
@@ -744,7 +741,7 @@ const TournamentDetails = ({ route, navigation }) => {
 
       {/* Floating action bar */}
       {!loading && !isPastTournament && (
-        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 90 }]}>
           <View style={styles.actionTopRow}>
             <TouchableOpacity
               style={styles.outlinePill}

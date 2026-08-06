@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import axios from "axios";
@@ -25,6 +25,7 @@ const ROLE_OPTIONS = [
 const BrowseTournamentJobs = () => {
   const { user } = useAuth();
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const userId = user?.id || user?._id;
 
@@ -108,6 +109,16 @@ const BrowseTournamentJobs = () => {
     setApplyRate("");
     setShowApplyModal(true);
   };
+
+  // Deep-link from Browse Jobs: if opened with a focusTournamentId, auto-open
+  // that tournament's apply modal once the list has loaded.
+  useEffect(() => {
+    const fid = route?.params?.focusTournamentId;
+    if (!fid || tournaments.length === 0) return;
+    const t = tournaments.find((x) => String(x._id) === String(fid));
+    if (t) openApplyModal(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route?.params?.focusTournamentId, tournaments]);
 
   const handleApply = async () => {
     if (!selectedRole) {

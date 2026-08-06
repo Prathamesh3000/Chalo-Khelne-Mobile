@@ -24,17 +24,41 @@ import { authFetch } from "../../api/authFetch";
 
 const { width } = Dimensions.get("window");
 
-// Curated 6-tile amenity set matching the Figma. Each tile maps to a key in
-// the Turf.facilities boolean dictionary; tiles whose facility flag is false
-// are hidden so the grid only shows what the turf actually provides.
-const AMENITY_DEFINITIONS = [
-  { key: "floodLights", label: "Floodlights", icon: "lightbulb-on-outline" },
-  { key: "restrooms", label: "Washroom", icon: "shower" },
-  { key: "parking", label: "Parking", icon: "car-outline" },
-  { key: "drinkingWater", label: "Water", icon: "water-outline" },
-  { key: "loungeArea", label: "Seating Area", icon: "chair-school" },
-  { key: "firstAidKit", label: "First Aid", icon: "plus-circle-outline" },
+// Amenities are NOT hardcoded — they're rendered straight from the turf data
+// (whatever the manager saved on the web). We only map an amenity NAME to a
+// sensible icon by keyword, with a generic fallback for anything unknown.
+const AMENITY_ICON_RULES = [
+  [/turf|grass|ground|pitch|field/, "grass"],
+  [/led/, "lightbulb-outline"],
+  [/light|flood/, "lightbulb-on-outline"],
+  [/park/, "car-outline"],
+  [/wifi|internet|wi-fi/, "wifi"],
+  [/cold|beverage|juice|soda/, "cup"],
+  [/water|drink/, "water-outline"],
+  [/food|cafe|canteen|restaurant|snack/, "silverware-fork-knife"],
+  [/lounge|seat|sitting|chair|grandstand/, "sofa-outline"],
+  [/shower/, "shower"],
+  [/locker|changing/, "locker"],
+  [/rest ?room|wash ?room|toilet/, "toilet"],
+  [/cctv|camera|surveillance/, "cctv"],
+  [/security|guard/, "shield-account-outline"],
+  [/first ?aid|medical/, "medical-bag"],
+  [/cover|shade|roof/, "home-roof"],
+  [/multiple|field/, "view-grid-outline"],
 ];
+function iconForAmenity(name) {
+  const n = String(name || "").toLowerCase().trim();
+  for (const [re, icon] of AMENITY_ICON_RULES) if (re.test(n)) return icon;
+  return "check-circle-outline";
+}
+// camelCase / snake_case key → "Title Case" (for legacy boolean-dictionary turfs)
+function prettifyAmenity(key) {
+  return String(key)
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
 
 const getSportIconName = (sportName) => {
   const n = String(sportName || "").toLowerCase();
@@ -169,9 +193,25 @@ export default function PlayerVenueDetails({ route, navigation }) {
     return `${km.toFixed(1)} km away`;
   })();
 
-  const enabledAmenities = AMENITY_DEFINITIONS.filter(
-    (a) => turfDetails.facilities?.[a.key]
-  );
+  // Render whatever the turf actually has — an array of amenity names (current
+  // web form, may arrive JSON-stringified) OR a legacy boolean dictionary.
+  const enabledAmenities = (() => {
+    let raw = turfDetails.facilities;
+    if (typeof raw === "string") {
+      try { raw = JSON.parse(raw); } catch { raw = raw.trim() ? [raw] : []; }
+    }
+    if (Array.isArray(raw)) {
+      return raw
+        .filter((x) => x != null && String(x).trim() !== "")
+        .map((name) => ({ key: String(name), label: String(name), icon: iconForAmenity(name) }));
+    }
+    if (raw && typeof raw === "object") {
+      return Object.entries(raw)
+        .filter(([, v]) => v === true || v === "true")
+        .map(([key]) => ({ key, label: prettifyAmenity(key), icon: iconForAmenity(key) }));
+    }
+    return [];
+  })();
 
   // Rules — Turf model doesn't expose a rules array yet. Show whatever the
   // turf has on `rules` (string or array), else fall back to the defaults

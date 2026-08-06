@@ -602,47 +602,54 @@ const StoryViewModal = ({
   );
 };
 
-// ─── STORY OPTIONS MODAL ─────────────────────────────────────────────────
-const StoryOptionsModal = ({ visible, onClose, onOptionPress, hasStory }) => (
-  <Modal visible={visible} transparent animationType="fade">
-    <TouchableWithoutFeedback onPress={onClose}>
-      <View style={styles.optionsModalOverlay}>
-        <TouchableWithoutFeedback>
-          <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsModalTitle}>Story Options</Text>
-            <Text style={styles.optionsModalSub}>Choose an option</Text>
-            <View style={styles.optionsBtnContainer}>
-              <TouchableOpacity
-                style={styles.optionsBtn}
-                onPress={() => onOptionPress("gallery")}
-              >
-                <Text style={styles.optionsBtnText}>
-                  {hasStory ? "ADD NEW (GALLERY)" : "ADD GALLERY"}
-                </Text>
+// ─── STORY OPTIONS SHEET ─────────────────────────────────────────────────
+// App-consistent bottom-sheet action menu (light, brand-green, icon rows) —
+// replaces the old dark/teal centered "Story Options" popup.
+const StoryOptionsModal = ({ visible, onClose, onOptionPress, hasStory }) => {
+  const insets = useSafeAreaInsets();
+  const options = [
+    { key: "gallery", icon: "images-outline", label: hasStory ? "Add photo story" : "Photo story", sub: "Pick a photo from your gallery" },
+    { key: "text", icon: "text-outline", label: hasStory ? "Add text story" : "Text story", sub: "Share a quick text update" },
+    ...(hasStory ? [{ key: "view", icon: "eye-outline", label: "View your story", sub: "See what you've posted" }] : []),
+  ];
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.storySheetOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={[styles.storySheet, { paddingBottom: insets.bottom + 12 }]}>
+              <View style={styles.storySheetHandle} />
+              <Text style={styles.storySheetTitle}>Your Story</Text>
+              <Text style={styles.storySheetSub}>Choose what to share</Text>
+              <View style={styles.storyOptList}>
+                {options.map((o) => (
+                  <TouchableOpacity
+                    key={o.key}
+                    style={styles.storyOptRow}
+                    activeOpacity={0.7}
+                    onPress={() => onOptionPress(o.key)}
+                  >
+                    <View style={styles.storyOptIcon}>
+                      <Ionicons name={o.icon} size={20} color="#15A765" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.storyOptLabel}>{o.label}</Text>
+                      <Text style={styles.storyOptSubLabel}>{o.sub}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#C4C9D4" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity style={styles.storyCancelBtn} activeOpacity={0.8} onPress={onClose}>
+                <Text style={styles.storyCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.optionsBtn}
-                onPress={() => onOptionPress("text")}
-              >
-                <Text style={styles.optionsBtnText}>
-                  {hasStory ? "ADD NEW (TEXT)" : "ADD TEXT"}
-                </Text>
-              </TouchableOpacity>
-              {hasStory && (
-                <TouchableOpacity
-                  style={styles.optionsBtn}
-                  onPress={() => onOptionPress("view")}
-                >
-                  <Text style={styles.optionsBtnText}>VIEW STORY</Text>
-                </TouchableOpacity>
-              )}
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </View>
-    </TouchableWithoutFeedback>
-  </Modal>
-);
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
 
 // ─── POST ITEM ───────────────────────────────────────────────────────────
 const PostItem = React.memo(
@@ -1781,28 +1788,19 @@ const styles = StyleSheet.create({
   storyReplyText: { color: "#fff", fontSize: 14 },
 
   // Options modal
-  optionsModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  optionsModalContent: {
-    width: "85%",
-    backgroundColor: "#333333",
-    borderRadius: 8,
-    padding: 24,
-  },
-  optionsModalTitle: { color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 8 },
-  optionsModalSub: { color: "#ccc", fontSize: 16, marginBottom: 30 },
-  optionsBtnContainer: { alignItems: "flex-end" },
-  optionsBtn: { paddingVertical: 12, width: "100%", alignItems: "flex-end" },
-  optionsBtnText: {
-    color: "#4ECDC4",
-    fontSize: 15,
-    fontWeight: "bold",
-    letterSpacing: 0.5,
-  },
+  // Story options — app-consistent light bottom sheet
+  storySheetOverlay: { flex: 1, backgroundColor: "rgba(15,23,42,0.45)", justifyContent: "flex-end" },
+  storySheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 10, paddingHorizontal: 18 },
+  storySheetHandle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "#E2E8F0", marginBottom: 14 },
+  storySheetTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
+  storySheetSub: { fontSize: 13, color: "#64748B", marginTop: 2, marginBottom: 12 },
+  storyOptList: {},
+  storyOptRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 4, gap: 12 },
+  storyOptIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: "#EAF8F0", alignItems: "center", justifyContent: "center" },
+  storyOptLabel: { fontSize: 15, fontWeight: "700", color: "#1E293B" },
+  storyOptSubLabel: { fontSize: 12, color: "#94A3B8", marginTop: 1 },
+  storyCancelBtn: { marginTop: 12, paddingVertical: 14, borderRadius: 14, backgroundColor: "#F1F5F9", alignItems: "center" },
+  storyCancelText: { fontSize: 15, fontWeight: "800", color: "#475569" },
 
   // Emoji picker
   emojiPickerWrapper: {

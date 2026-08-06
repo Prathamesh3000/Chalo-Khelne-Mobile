@@ -16,12 +16,16 @@ import {
 import { MaterialIcons, FontAwesome5, Feather, Ionicons } from '@expo/vector-icons';
 import API from '../../api/tournaments';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import useTabBarClearance from '../../hooks/useTabBarClearance';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import useTournamentSports from '../../hooks/useTournamentSports';
 import SportTabStrip from '../../components/SportTabStrip';
 import CricketScoreDetail from '../../components/CricketScoreDetail';
+import TeamTieScorerModal from './TeamTieScorerModal';
+import AutoScoreboard from '../../components/AutoScoreboard';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -72,7 +76,15 @@ function sbScoreErrorMessage(err) {
 }
 
 const TournamentLeaderboardDetail = ({ route, navigation }) => {
-  const { tournament, tournamentId, tournamentName, tournamentType } = route.params;
+  const { tournament, tournamentId, tournamentName, tournamentType } = route.params || {};
+  const tabClearance = useTabBarClearance();
+
+  // Show the tournament's own name in the top bar instead of the static
+  // "Tournament Leaderboard" route name.
+  useEffect(() => {
+    const name = tournamentName || tournament?.name || tournament?.title || tournament?.tournamentName;
+    if (name) navigation.setOptions({ title: name, headerTitle: name });
+  }, [navigation, tournamentName, tournament]);
   const { user, token } = useAuth();
   const userId = user?.id || user?._id;
 
@@ -82,6 +94,9 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
 
   // STATE MANAGEMENT
   const [leaderboardData, setLeaderboardData] = useState([]);
+  // Registered entries (players/pairs) — shown in Full Standings before any
+  // matches exist, so a fresh tournament isn't a blank table.
+  const [entries, setEntries] = useState([]);
   const [tournamentStats, setTournamentStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -140,6 +155,9 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
   // TeamKnockoutMatches normalized to the same player1/player2 shape used
   // elsewhere. Drives the "Round Robin" tab's match list.
   const [roundRobinMatches, setRoundRobinMatches] = useState([]);
+  // Team-tie (Rapid Rallies) scoring uses a dedicated modal + endpoints — the
+  // individual-match scoreboard 404s on team ties.
+  const [teamTieMatchId, setTeamTieMatchId] = useState(null);
   const [highlightedPlayerId, setHighlightedPlayerId] = useState(null);
   const [highlightedPathIds, setHighlightedPathIds] = useState(new Set());
   const [topPlayersByGroup, setTopPlayersByGroup] = useState({}); // { groupId: [players] }
@@ -154,6 +172,10 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
 
   // Phase 4e: umpire authorization summary for this tournament (null = not yet fetched)
   const [umpireAuth, setUmpireAuth] = useState(null);
+  // Court-scoped umpires land on a dedicated "my court" scoring view (focus
+  // mode). They can drop into the full leaderboard via "View standings" and
+  // come back. Default true so umpires open straight into their court.
+  const [umpireFocus, setUmpireFocus] = useState(true);
 
   // Reset active set when a new match opens
   useEffect(() => {
@@ -162,22 +184,33 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
 
   // Phase 4e: fetch the caller's umpire authorization summary.
   // Non-umpires fall through to hasAnyGrant=false; the helpers below gate UI accordingly.
-  useEffect(() => {
+  const fetchUmpireAuth = useCallback(async () => {
     if (!userId || !tournamentId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await axios.get(
-          `${API.BASE_URL}/referee/my-authorizations/${userId}/${tournamentId}`
-        );
-        if (!cancelled) setUmpireAuth(res.data);
-      } catch (err) {
-        // 4xx or network issue → treat as no grants (user just won't get tap-to-score).
-        if (!cancelled) setUmpireAuth({ hasAnyGrant: false, stages: [], matchIds: [] });
-      }
-    })();
-    return () => { cancelled = true; };
+    try {
+      const res = await axios.get(
+        `${API.BASE_URL}/referee/my-authorizations/${userId}/${tournamentId}`
+      );
+      setUmpireAuth(res.data);
+    } catch (err) {
+      // 4xx or network issue → treat as no grants (user just won't get tap-to-score).
+      setUmpireAuth({ hasAnyGrant: false, stages: [], matchIds: [] });
+    }
   }, [userId, tournamentId]);
+
+  // Refetch on every focus so a court (re)assignment made on the web manager
+  // reflects when the umpire returns to this screen — no reopen. While an
+  // umpire stays on the screen, also poll so an unassign/reassign on web
+  // clears (or updates) their courts from the server within ~15s, without a
+  // manual pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      fetchUmpireAuth();
+      const isUmpire = (user?.role || '').toLowerCase() === 'referee';
+      if (!isUmpire) return undefined; // non-umpires never need this poll
+      const id = setInterval(fetchUmpireAuth, 15000);
+      return () => clearInterval(id);
+    }, [fetchUmpireAuth, user?.role])
+  );
 
   // Phase 4e: stage derivation (matches server/utils/umpireAuth.js → getMatchStage)
   const getMatchStage = (match) => (match?.groupId ? 'group-stage' : 'knockout');
@@ -197,9 +230,52 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
     if (Array.isArray(umpireAuth.matchIds) && matchIdStr && umpireAuth.matchIds.includes(matchIdStr)) {
       return true;
     }
+    // Court-based grant — authorized for every match on their assigned court/table.
+    // Case-insensitive + trimmed to mirror server/utils/umpireAuth.js.
+    if (matchIsOnMyCourt(match)) return true;
+    // Court-scoped umpires get stages:[] from the server, so a court umpire never
+    // falls through to a stage grant — they're strictly limited to their court(s).
     const stage = getMatchStage(match);
     return Array.isArray(umpireAuth.stages) && umpireAuth.stages.includes(stage);
   };
+
+  // Normalized set of the umpire's assigned court/table names (lower-cased, trimmed).
+  const myCourtSet = useMemo(() => {
+    const set = new Set();
+    (umpireAuth?.courts || []).forEach((c) => c && set.add(String(c).trim().toLowerCase()));
+    return set;
+  }, [umpireAuth]);
+
+  const matchIsOnMyCourt = (match) => {
+    const raw = match?.courtNumber != null ? String(match.courtNumber).trim().toLowerCase() : '';
+    if (!raw || raw === 'tbd' || raw === 'bye') return false;
+    return myCourtSet.has(raw);
+  };
+
+  // Whether the current user is a court-scoped umpire in this tournament.
+  const isCourtUmpire = isUmpireRole && myCourtSet.size > 0;
+
+  // "My Court" feed — every match assigned to the umpire's court(s), across
+  // group/league, round-robin and knockout, classified by live-state and
+  // sorted live → upcoming → completed. Powers the top banner below.
+  const myCourtMatches = useMemo(() => {
+    if (myCourtSet.size === 0) return [];
+    const pool = [...(matches || []), ...(roundRobinMatches || []), ...(knockoutMatches || [])];
+    const seen = new Set();
+    const mine = [];
+    for (const m of pool) {
+      const id = m?._id?.toString?.() || m?._id;
+      if (!id || seen.has(id)) continue;
+      if (!matchIsOnMyCourt(m)) continue;
+      seen.add(id);
+      const completed = m.status === 'completed' || m.status === 'COMPLETED' || !!m.matchWinner;
+      const live = !completed && (m.status === 'in-progress' || m.status === 'live');
+      mine.push({ ...m, __state: completed ? 2 : live ? 0 : 1 });
+    }
+    mine.sort((a, b) => (a.__state - b.__state) || (a.matchNumber || 0) - (b.matchNumber || 0));
+    return mine;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, roundRobinMatches, knockoutMatches, myCourtSet]);
 
   // ────────────────────────────────────────────────────────────────────────
   // Manual / Auto Scoreboard (umpire only)
@@ -213,6 +289,7 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
   const [sbMatchData, setSbMatchData] = useState(null);
   const [sbMatchStatus, setSbMatchStatus] = useState(null);
   const [sbIsEnabled, setSbIsEnabled] = useState(false); // false = Manual, true = Auto
+  const [sbFirstServer, setSbFirstServer] = useState('left'); // serve rotation origin
   const [sbMatchFormat, setSbMatchFormat] = useState(null);
   const [sbPlayerAPoints, setSbPlayerAPoints] = useState(0);
   const [sbPlayerBPoints, setSbPlayerBPoints] = useState(0);
@@ -237,10 +314,26 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
   const sbShowAlert = (title, message) => Alert.alert(title, message);
 
   const openScoreboard = (m) => {
+    // Team ties (5 rubbers) use the dedicated team-knockout scorer, not the
+    // player-vs-player scoreboard (which hits individual-match endpoints).
+    if (m?.type === 'team-knockout') {
+      setSelectedMatch(null);
+      setTeamTieMatchId(m._id);
+      return;
+    }
     const p1Name = m.player1?.playerName || m.player1?.playerId?.name || m.player1?.name || 'Player A';
     const p2Name = m.player2?.playerName || m.player2?.playerId?.name || m.player2?.name || 'Player B';
     const p1Id = m.player1?.playerId?._id || m.player1?.playerId || m.player1?._id;
     const p2Id = m.player2?.playerId?._id || m.player2?.playerId || m.player2?._id;
+    // Sport-specific scorers: cricket (innings, ball-by-ball) and carrom (board)
+    // capture data the Manual/Auto board can't, so they route to their dedicated
+    // scorers. Everything else uses the canonical Manual/Auto scoreboard below.
+    const st = m.matchFormat?.scoringType || m.scoringType;
+    if (st === 'innings' || st === 'board') {
+      setSelectedMatch(null);
+      navigation.navigate('RefereeMatchScorer', { matchId: m._id, matchLabel: `${p1Name} vs ${p2Name}` });
+      return;
+    }
     setScoreboardMatch({
       matchId: m._id,
       groupId: m.groupId || m.group || null, // stage signal — group matches only
@@ -268,6 +361,23 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
     setScoreboardVisible(false);
     setScoreboardMatch(null);
   };
+
+  // Deep-link auto-open: when navigated here with `_scoreMatchId` (e.g. an
+  // umpire tapped "Open Scorer" on a generic match from My Assignments, which
+  // redirects here so generic scoring uses the ONE canonical board), find that
+  // match once its data has loaded and open the scoreboard on it.
+  const autoScoreRef = useRef(false);
+  useEffect(() => {
+    const wantId = route.params?._scoreMatchId;
+    if (!wantId || autoScoreRef.current) return;
+    const pool = [...(matches || []), ...(roundRobinMatches || []), ...(knockoutMatches || [])];
+    const found = pool.find((mm) => String(mm._id?.toString?.() || mm._id) === String(wantId));
+    if (found) {
+      autoScoreRef.current = true;
+      openScoreboard(found);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params, matches, roundRobinMatches, knockoutMatches]);
 
   const sbCalculateSetWins = (sets) => {
     let a = 0;
@@ -1035,6 +1145,29 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
     }
   };
 
+  // Registered entries — the players/pairs signed up (with their category),
+  // shown in Full Standings until match results exist.
+  const fetchEntries = useCallback(async () => {
+    if (!tournamentId) return;
+    try {
+      const res = await axios.get(API.ENDPOINTS.BOOKINGS.BY_TOURNAMENT(tournamentId));
+      const raw = res.data?.bookings || res.data?.data || res.data || [];
+      const list = (Array.isArray(raw) ? raw : [])
+        .filter((b) => String(b.status || 'confirmed').toLowerCase() === 'confirmed')
+        .map((b) => ({
+          name: b.userName || b.userId?.name || b.name || 'Unknown',
+          category: b.sportSelections?.[0]?.categoryName || b.category || '',
+        }));
+      setEntries(list);
+    } catch {
+      setEntries([]);
+    }
+  }, [tournamentId]);
+
+  useEffect(() => {
+    fetchEntries();
+  }, [fetchEntries]);
+
   // REFRESH HANDLER
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -1048,8 +1181,11 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
         : Promise.resolve();
     const topPlayersFetch = isGroupStage ? fetchAllGroupTopPlayers() : Promise.resolve();
     const rrFetch = isTeamKnockout ? fetchRoundRobinStandings() : Promise.resolve();
-    Promise.all([mainFetch, groupFetch, knockoutFetch, topPlayersFetch, rrFetch]).finally(() => setRefreshing(false));
-  }, [isGroupStage, isSinglesKnockout, isTeamKnockout]);
+    // Also re-pull umpire authorizations so a court assign/unassign on web
+    // reflects on a manual pull-to-refresh.
+    const authFetch = fetchUmpireAuth();
+    Promise.all([mainFetch, groupFetch, knockoutFetch, topPlayersFetch, rrFetch, authFetch]).finally(() => setRefreshing(false));
+  }, [isGroupStage, isSinglesKnockout, isTeamKnockout, fetchUmpireAuth]);
 
   // FILTERING AND SORTING
   const filteredAndSortedData = useMemo(() => {
@@ -1393,36 +1529,73 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
     </View>
   );
 
-  const renderLeaderboardMode = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.premiumTable}>
-        <View style={styles.premiumTableHeader}>
-          <Text style={[styles.pHeaderCell, { flex: 0.5 }]}>#</Text>
-          <Text style={[styles.pHeaderCell, { flex: 2, textAlign: 'left' }]}>NAME</Text>
-          <Text style={[styles.pHeaderCell, { flex: 1 }]}>W/L</Text>
-          <Text style={[styles.pHeaderCell, { flex: 1 }]}>PTS</Text>
-        </View>
-        {leaderboardData.map((item, index) => (
-          <View key={index} style={[styles.premiumTableRow, index < 3 && styles.topThreeRow]}>
-            <View style={[styles.pCell, { flex: 0.5 }]}>
-              {index < 3 ? (
-                <MaterialIcons name="emoji-events" size={18} color={index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32'} />
-              ) : (
-                <Text style={styles.rankText}>#{index + 1}</Text>
-              )}
-            </View>
-            <Text style={[styles.pCell, { flex: 2, textAlign: 'left', fontWeight: 'bold' }]}>
-              {item.playerName || item.teamName || 'Unknown'}
-            </Text>
-            <Text style={[styles.pCell, { flex: 1 }]}>{item.totalWins || item.matchesWon || 0}-{item.totalLosses || item.matchesLost || 0}</Text>
-            <Text style={[styles.pCell, { flex: 1, color: '#15A765', fontWeight: '800' }]}>
-              {item.performanceScore || item.totalPoints || item.winRate || 0}
-            </Text>
+  const renderLeaderboardMode = () => {
+    // Before any match results exist, show the registered entries (+ category)
+    // instead of a blank table.
+    const showEntries = leaderboardData.length === 0 && entries.length > 0;
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.premiumTable}>
+          <View style={styles.premiumTableHeader}>
+            <Text style={[styles.pHeaderCell, { flex: 0.5 }]}>#</Text>
+            <Text style={[styles.pHeaderCell, { flex: 2, textAlign: 'left' }]}>NAME</Text>
+            {showEntries ? (
+              <Text style={[styles.pHeaderCell, { flex: 1.5, textAlign: 'right' }]}>CATEGORY</Text>
+            ) : (
+              <>
+                <Text style={[styles.pHeaderCell, { flex: 1 }]}>W/L</Text>
+                <Text style={[styles.pHeaderCell, { flex: 1 }]}>PTS</Text>
+              </>
+            )}
           </View>
-        ))}
+
+          {showEntries ? (
+            entries.map((e, index) => (
+              <View key={index} style={styles.premiumTableRow}>
+                <View style={[styles.pCell, { flex: 0.5 }]}>
+                  <Text style={styles.rankText}>{index + 1}</Text>
+                </View>
+                <Text style={[styles.pCell, { flex: 2, textAlign: 'left', fontWeight: 'bold' }]} numberOfLines={1}>
+                  {e.name}
+                </Text>
+                <Text style={[styles.pCell, { flex: 1.5, textAlign: 'right', color: '#6B7280', fontWeight: '600' }]} numberOfLines={1}>
+                  {e.category || '—'}
+                </Text>
+              </View>
+            ))
+          ) : leaderboardData.length > 0 ? (
+            leaderboardData.map((item, index) => (
+              <View key={index} style={[styles.premiumTableRow, index < 3 && styles.topThreeRow]}>
+                <View style={[styles.pCell, { flex: 0.5 }]}>
+                  {index < 3 ? (
+                    <MaterialIcons name="emoji-events" size={18} color={index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32'} />
+                  ) : (
+                    <Text style={styles.rankText}>#{index + 1}</Text>
+                  )}
+                </View>
+                <Text style={[styles.pCell, { flex: 2, textAlign: 'left', fontWeight: 'bold' }]}>
+                  {item.playerName || item.teamName || 'Unknown'}
+                </Text>
+                <Text style={[styles.pCell, { flex: 1 }]}>{item.totalWins || item.matchesWon || 0}-{item.totalLosses || item.matchesLost || 0}</Text>
+                <Text style={[styles.pCell, { flex: 1, color: '#15A765', fontWeight: '800' }]}>
+                  {item.performanceScore || item.totalPoints || item.winRate || 0}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <View style={{ paddingVertical: 28, alignItems: 'center' }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 13 }}>No entries yet.</Text>
+            </View>
+          )}
+        </View>
+        {showEntries && (
+          <Text style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 11.5, marginTop: 10 }}>
+            {entries.length} registered · standings update once the bracket is generated and matches are scored
+          </Text>
+        )}
       </View>
-    </View>
-  );
+    );
+  };
 
   // Single match-card renderer used by the FlatList below. Pulled out of
   // renderRoundRobin so it can be referenced as FlatList renderItem without
@@ -2737,10 +2910,143 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
     );
   };
 
+  // Shared helpers for the umpire focus view.
+  const umpireSideLabel = (m, side) => {
+    const s = side === 1
+      ? (m.homeTeam || m.team1 || m.player1)
+      : (m.awayTeam || m.team2 || m.player2);
+    return s?.teamName || s?.name || s?.userName || s?.playerName || s?.playerId?.name || 'TBD';
+  };
+  const umpireOpenMatch = (m) => {
+    const completed = m.__state === 2;
+    if (isAuthorizedForMatch(m) && !completed) openScoreboard(m);
+    else setSelectedMatch(m);
+  };
+
+  // One match card in the umpire focus view.
+  const renderUmpireMatchCard = (m) => {
+    const isLive = m.__state === 0;
+    const isDone = m.__state === 2;
+    const canScore = isAuthorizedForMatch(m) && !isDone;
+    const summary = (() => {
+      const mru = require('../../utils/matchResultUtils');
+      return mru.getMatchSummaryLine(m);
+    })();
+    const when = (() => {
+      const iso = m.matchStartTime || m.startTime || m.matchDate;
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const date = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }).replace(' ', '-');
+      const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase().replace(' ', '');
+      return `${date} · ${time}`;
+    })();
+    return (
+      <TouchableOpacity
+        key={m._id?.toString?.() || m._id}
+        style={[styles.uCard, isLive && styles.uCardLive]}
+        activeOpacity={0.85}
+        onPress={() => umpireOpenMatch(m)}
+      >
+        <View style={styles.uCardTop}>
+          <Text style={styles.uTeams} numberOfLines={1}>
+            {umpireSideLabel(m, 1)} <Text style={styles.uVs}>vs</Text> {umpireSideLabel(m, 2)}
+          </Text>
+          {isDone && !!summary && <Text style={styles.uDoneSummary} numberOfLines={1}>{summary}</Text>}
+          {!isDone && !!when && (
+            <Text style={styles.uWhen}>{when}</Text>
+          )}
+        </View>
+        {canScore ? (
+          <View style={[styles.uScoreBtn, isLive && styles.uScoreBtnLive]}>
+            <Ionicons name="create-outline" size={15} color="#fff" />
+            <Text style={styles.uScoreText}>Score</Text>
+          </View>
+        ) : isDone ? (
+          <Ionicons name="checkmark-circle" size={22} color="#2E7D32" />
+        ) : (
+          <Ionicons name="chevron-forward" size={18} color="#C4C9D4" />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Umpire-only focus view — replaces the leaderboard for a court-scoped umpire.
+  // Shows just their court's matches, grouped Live → Up next → Completed, each
+  // scoreable. "View standings" drops into the full leaderboard.
+  const renderUmpireFocusView = () => {
+    const courtNames = (umpireAuth?.courts || []).join(' · ');
+    const live = myCourtMatches.filter((m) => m.__state === 0);
+    const upNext = myCourtMatches.filter((m) => m.__state === 1);
+    const done = myCourtMatches.filter((m) => m.__state === 2);
+    const Section = ({ label, items }) => (items.length === 0 ? null : (
+      <View style={styles.uSection}>
+        <Text style={styles.uSectionTitle}>{label}</Text>
+        {items.map(renderUmpireMatchCard)}
+      </View>
+    ));
+    return (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={{ paddingBottom: tabClearance }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#15A765']} />}
+        >
+          {/* Court header */}
+          <View style={styles.uHeader}>
+            <View style={styles.uHeaderRow}>
+              <View style={styles.uCourtBadge}>
+                <Ionicons name="tennisball" size={16} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.uHeaderLabel}>YOUR COURT{myCourtSet.size > 1 ? 'S' : ''}</Text>
+                <Text style={styles.uHeaderCourt} numberOfLines={1}>{courtNames || '—'}</Text>
+              </View>
+            </View>
+            <View style={styles.uStatsRow}>
+              <View style={styles.uStat}><Text style={styles.uStatVal}>{myCourtMatches.length}</Text><Text style={styles.uStatLbl}>Matches</Text></View>
+              <View style={styles.uStatDivider} />
+              <View style={styles.uStat}><Text style={[styles.uStatVal, { color: '#D32F2F' }]}>{live.length}</Text><Text style={styles.uStatLbl}>Live</Text></View>
+              <View style={styles.uStatDivider} />
+              <View style={styles.uStat}><Text style={[styles.uStatVal, { color: '#2E7D32' }]}>{done.length}</Text><Text style={styles.uStatLbl}>Done</Text></View>
+            </View>
+          </View>
+
+          {myCourtMatches.length === 0 ? (
+            <View style={styles.uEmpty}>
+              <Ionicons name="calendar-outline" size={44} color="#D3D8E0" />
+              <Text style={styles.uEmptyTitle}>No matches on your court yet</Text>
+              <Text style={styles.uEmptyText}>Matches assigned to your table will appear here to score.</Text>
+            </View>
+          ) : (
+            <>
+              <Section label="LIVE NOW" items={live} />
+              <Section label="UP NEXT" items={upNext} />
+              <Section label="COMPLETED" items={done} />
+            </>
+          )}
+
+          {/* Escape hatch to the full leaderboard */}
+          <TouchableOpacity style={styles.uStandingsLink} activeOpacity={0.7} onPress={() => setUmpireFocus(false)}>
+            <Ionicons name="podium-outline" size={16} color="#15A765" />
+            <Text style={styles.uStandingsText}>View standings &amp; bracket</Text>
+            <Ionicons name="arrow-forward" size={15} color="#15A765" />
+          </TouchableOpacity>
+        </ScrollView>
+    );
+  };
+
   // Header block reused by both branches — keeps the summary card + tab bar
   // identical between the ScrollView and FlatList layouts.
   const renderTopChrome = () => (
     <>
+      {/* Court umpire viewing the full leaderboard — quick way back to their court */}
+      {isCourtUmpire && (
+        <TouchableOpacity style={styles.uBackBar} activeOpacity={0.7} onPress={() => setUmpireFocus(true)}>
+          <Ionicons name="arrow-back" size={16} color="#15A765" />
+          <Text style={styles.uBackText}>Back to my court</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Multi-sport selector — switch which sport's standings/groups are shown */}
       <SportTabStrip sports={tournamentSports} activeSportId={activeSportId} onChange={setActiveSportId} />
 
@@ -2815,7 +3121,12 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      {useRRListBranch ? (
+      {/* Court-scoped umpire → dedicated focus view (unless they opted into
+          standings). Rendered as a body branch so the scorer modals below stay
+          mounted. */}
+      {isCourtUmpire && umpireFocus ? (
+        renderUmpireFocusView()
+      ) : useRRListBranch ? (
         // RR_LIST_BRANCH — virtualized list path for high-volume team RR
         // matches. Replaces the ScrollView only — the rich match modal below
         // is shared with the regular path.
@@ -2831,7 +3142,7 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
               </View>
             </View>
           }
-          contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 24 }}
+          contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: tabClearance }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#15A765']} />
           }
@@ -2845,6 +3156,7 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
       ) : (
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: tabClearance }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#15A765']} />
         }
@@ -3078,7 +3390,48 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
                       </View>
                     </View>
                   ) : sets.length > 0 ? (
-                    hasNestedGames(m.matchFormat) ? (
+                    m.type === 'team-knockout' ? (
+                      // ─── TEAM TIE (Rapid Rallies / Davis Cup): rubber-by-rubber ───
+                      <View style={styles.matchModalSection}>
+                        <Text style={styles.matchModalSectionTitle}>Rubbers</Text>
+                        {sets.map((set, idx) => {
+                          const homeWon = set.setWinner === 'home';
+                          const awayWon = set.setWinner === 'away';
+                          const awayPartner = set.awayPlayerB || set.awayPlayerZ;
+                          const isDoubles = String(set.type || '').toLowerCase().includes('doubles') || !!set.homePlayerB;
+                          const isFemale = m.formatId === 'rapid_rallies_s1' && (set.setNumber === 3);
+                          const homeLabel = set.homePlayerB ? `${set.homePlayer || '—'} & ${set.homePlayerB}` : (set.homePlayer || '—');
+                          const awayLabel = awayPartner ? `${set.awayPlayer || '—'} & ${awayPartner}` : (set.awayPlayer || '—');
+                          const gh = set.gamesWon?.home ?? 0;
+                          const ga = set.gamesWon?.away ?? 0;
+                          const gamePts = (Array.isArray(set.games) ? set.games : [])
+                            .filter((g) => g.status === 'COMPLETED' || (g.homePoints || 0) + (g.awayPoints || 0) > 0)
+                            .map((g) => `${g.homePoints ?? 0}-${g.awayPoints ?? 0}`);
+                          const label = isFemale ? 'Women’s Singles' : isDoubles ? 'Doubles' : 'Singles';
+                          return (
+                            <View key={idx} style={{ paddingVertical: 10, borderBottomWidth: idx < sets.length - 1 ? 1 : 0, borderBottomColor: '#F1F5F9' }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748B' }}>RUBBER {set.setNumber || idx + 1}</Text>
+                                  <View style={{ marginLeft: 6, backgroundColor: isFemale ? '#FCE7F3' : isDoubles ? '#DCFCE7' : '#FEF3C7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: isFemale ? '#DB2777' : isDoubles ? '#15803D' : '#B45309' }}>{label.toUpperCase()}</Text>
+                                  </View>
+                                </View>
+                                <Text style={{ fontSize: 13, fontWeight: '900', color: homeWon ? '#15A765' : awayWon ? '#DC2626' : '#94A3B8' }}>{gh}–{ga}</Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: homeWon ? '800' : '600', color: homeWon ? '#0F172A' : '#475569' }}>{homeLabel}</Text>
+                                <Text style={{ fontSize: 10, color: '#94A3B8', marginHorizontal: 8 }}>vs</Text>
+                                <Text numberOfLines={1} style={{ flex: 1, textAlign: 'right', fontSize: 13, fontWeight: awayWon ? '800' : '600', color: awayWon ? '#0F172A' : '#475569' }}>{awayLabel}</Text>
+                              </View>
+                              {gamePts.length > 0 && (
+                                <Text style={{ marginTop: 4, fontSize: 11, color: '#94A3B8', fontWeight: '600' }}>{gamePts.join('    ')}</Text>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : hasNestedGames(m.matchFormat) ? (
                       // ─── NESTED (Tennis): set tabs + per-set game grid ───
                       <View style={styles.matchModalSection}>
                         <Text style={styles.matchModalSectionTitle}>Set-by-Set Scores</Text>
@@ -3235,6 +3588,14 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
         </View>
       </Modal>
 
+      {/* Team-tie (Rapid Rallies) scorer — 5 rubbers via team-knockout endpoints */}
+      <TeamTieScorerModal
+        visible={!!teamTieMatchId}
+        matchId={teamTieMatchId}
+        onClose={() => setTeamTieMatchId(null)}
+        onScored={() => { fetchKnockoutMatches(); fetchRoundRobinStandings(); }}
+      />
+
       {/* ─────────────────────────────────────────────────────────────────
           Full-screen Scoreboard Modal (umpire-only)
           Port of Manager/MGroupStageScoreBoard.jsx — Manual + Auto modes.
@@ -3282,171 +3643,27 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
               <Text style={styles.sbLoadingText}>Loading match...</Text>
             </View>
           ) : sbIsEnabled ? (
-            // ─── AUTO MODE — tap-to-score zones ───
-            <View style={styles.sbAutoBody}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                disabled={sbTapCooldown}
-                onPress={() => sbIncrementPlayer(true)}
-                style={[styles.sbAutoSide, { backgroundColor: '#F97316' }, sbTapCooldown && { opacity: 0.5 }]}
-              >
-                <View style={styles.sbAutoStatsBox}>
-                  <View style={styles.sbAutoStatsRow}>
-                    <View style={styles.sbAutoStatItem}>
-                      <Text style={styles.sbAutoStatLabel}>Sets</Text>
-                      <Text style={styles.sbAutoStatValue}>
-                        {sbPlayerASetWins}/{sbMatchFormat?.setsToWin || '?'}
-                      </Text>
-                    </View>
-                    <View style={styles.sbAutoStatItem}>
-                      <Text style={styles.sbAutoStatLabel}>Games</Text>
-                      <Text style={styles.sbAutoStatValue}>
-                        {sbCurrentSetGames.playerA}/{sbMatchFormat?.gamesToWin || '?'}
-                      </Text>
-                    </View>
-                  </View>
-                  {(sbWinner === scoreboardMatch?.playerAName || sbPlayerASetWins > sbPlayerBSetWins) && (
-                    <View style={styles.sbAutoWinnerRow}>
-                      <Ionicons name="trophy" size={16} color="#FFD700" />
-                      <Text style={styles.sbAutoWinnerText}>Winner</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.sbAutoScoreWrap}>
-                  <Text style={styles.sbAutoGameLabel}>Game {sbCurrentGameNumber}</Text>
-                  <Text style={styles.sbAutoScoreBig}>
-                    {sbPlayerAPoints < 10 ? `0${sbPlayerAPoints}` : sbPlayerAPoints}
-                  </Text>
-                </View>
-
-                <Text style={styles.sbAutoPlayerName} numberOfLines={1}>
-                  {scoreboardMatch?.playerAName}
-                </Text>
-
-                <View style={styles.sbAutoBottomRow}>
-                  <TouchableOpacity
-                    onPress={(e) => { e.stopPropagation(); if (!sbTapCooldown) sbDecrementPlayer(true); }}
-                    disabled={sbTapCooldown}
-                    style={styles.sbAutoMinusBtn}
-                  >
-                    <Ionicons name="remove" size={22} color="#fff" />
-                  </TouchableOpacity>
-                  <View style={styles.sbAutoSetHistRow}>
-                    {sbCompletedSets.map((s, i) => (
-                      <View key={i} style={styles.sbAutoSetChip}>
-                        <Text style={styles.sbAutoSetChipScore}>{s[0]}</Text>
-                        <Text style={styles.sbAutoSetChipLabel}>S{i + 1}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              {/* Center pill — current score */}
-              <View pointerEvents="none" style={styles.sbAutoCenter}>
-                <View style={styles.sbAutoCenterPill}>
-                  <Text style={styles.sbAutoCenterScore}>
-                    <Text style={{ color: '#F97316' }}>{sbPlayerAPoints}</Text>
-                    <Text style={{ color: '#999' }}>  -  </Text>
-                    <Text style={{ color: '#EF4444' }}>{sbPlayerBPoints}</Text>
-                  </Text>
-                  <View style={styles.sbAutoCenterMeta}>
-                    <Text style={styles.sbAutoCenterMetaText}>
-                      Games {sbCurrentSetGames.playerA} - {sbCurrentSetGames.playerB}
-                    </Text>
-                    <Text style={styles.sbAutoCenterMetaText}>
-                      Sets {sbPlayerASetWins} - {sbPlayerBSetWins}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                disabled={sbTapCooldown}
-                onPress={() => sbIncrementPlayer(false)}
-                style={[styles.sbAutoSide, { backgroundColor: '#EF4444' }, sbTapCooldown && { opacity: 0.5 }]}
-              >
-                <View style={styles.sbAutoStatsBox}>
-                  <View style={styles.sbAutoStatsRow}>
-                    <View style={styles.sbAutoStatItem}>
-                      <Text style={styles.sbAutoStatLabel}>Games</Text>
-                      <Text style={styles.sbAutoStatValue}>
-                        {sbCurrentSetGames.playerB}/{sbMatchFormat?.gamesToWin || '?'}
-                      </Text>
-                    </View>
-                    <View style={styles.sbAutoStatItem}>
-                      <Text style={styles.sbAutoStatLabel}>Sets</Text>
-                      <Text style={styles.sbAutoStatValue}>
-                        {sbPlayerBSetWins}/{sbMatchFormat?.setsToWin || '?'}
-                      </Text>
-                    </View>
-                  </View>
-                  {(sbWinner === scoreboardMatch?.playerBName || sbPlayerBSetWins > sbPlayerASetWins) && (
-                    <View style={styles.sbAutoWinnerRow}>
-                      <Ionicons name="trophy" size={16} color="#FFD700" />
-                      <Text style={styles.sbAutoWinnerText}>Winner</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.sbAutoScoreWrap}>
-                  <Text style={styles.sbAutoGameLabel}>Game {sbCurrentGameNumber}</Text>
-                  <Text style={styles.sbAutoScoreBig}>
-                    {sbPlayerBPoints < 10 ? `0${sbPlayerBPoints}` : sbPlayerBPoints}
-                  </Text>
-                </View>
-
-                <Text style={styles.sbAutoPlayerName} numberOfLines={1}>
-                  {scoreboardMatch?.playerBName}
-                </Text>
-
-                <View style={styles.sbAutoBottomRow}>
-                  <View style={styles.sbAutoSetHistRow}>
-                    {sbCompletedSets.map((s, i) => (
-                      <View key={i} style={styles.sbAutoSetChip}>
-                        <Text style={styles.sbAutoSetChipScore}>{s[1]}</Text>
-                        <Text style={styles.sbAutoSetChipLabel}>S{i + 1}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  <TouchableOpacity
-                    onPress={(e) => { e.stopPropagation(); if (!sbTapCooldown) sbDecrementPlayer(false); }}
-                    disabled={sbTapCooldown}
-                    style={styles.sbAutoMinusBtn}
-                  >
-                    <Ionicons name="remove" size={22} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-
-              {/* Auto-mode controls */}
-              <View style={styles.sbAutoControls}>
-                <TouchableOpacity
-                  onPress={() => sbCompleteCurrentGame(sbPlayerAPoints, sbPlayerBPoints)}
-                  disabled={sbButtonDisabled || !!sbWinner}
-                  style={[styles.sbAutoCtrlBtn, { backgroundColor: '#EA580C' }, (sbButtonDisabled || sbWinner) && { opacity: 0.5 }]}
-                >
-                  <Ionicons name="checkmark" size={18} color="#fff" />
-                  <Text style={styles.sbAutoCtrlBtnText}>End Game</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={sbResetPoints}
-                  disabled={sbButtonDisabled || !!sbWinner}
-                  style={[styles.sbAutoCtrlBtn, { backgroundColor: '#525252' }, (sbButtonDisabled || sbWinner) && { opacity: 0.5 }]}
-                >
-                  <Ionicons name="refresh" size={18} color="#fff" />
-                  <Text style={styles.sbAutoCtrlBtnText}>Reset</Text>
-                </TouchableOpacity>
-              </View>
-
-              {!!sbMessage && (
-                <View style={styles.sbStatusToast}>
-                  <Text style={styles.sbStatusToastText}>{sbMessage}</Text>
-                </View>
-              )}
-            </View>
+            // ─── AUTO MODE — shared tap scoreboard (red/teal, serve, tally) ───
+            <AutoScoreboard
+              leftName={scoreboardMatch?.playerAName || 'Player A'}
+              rightName={scoreboardMatch?.playerBName || 'Player B'}
+              leftScore={sbPlayerAPoints}
+              rightScore={sbPlayerBPoints}
+              leftGames={sbPlayerASetWins}
+              rightGames={sbPlayerBSetWins}
+              pointsToWinGame={sbMatchFormat?.pointsToWinGame || 11}
+              firstServer={sbFirstServer}
+              onSwapServer={() => setSbFirstServer((s) => (s === 'left' ? 'right' : 'left'))}
+              onScoreLeft={() => { if (!sbTapCooldown) sbIncrementPlayer(true); }}
+              onScoreRight={() => { if (!sbTapCooldown) sbIncrementPlayer(false); }}
+              onMinusLeft={() => { if (!sbTapCooldown) sbDecrementPlayer(true); }}
+              onMinusRight={() => { if (!sbTapCooldown) sbDecrementPlayer(false); }}
+              onSubmit={() => sbCompleteCurrentGame(sbPlayerAPoints, sbPlayerBPoints)}
+              submitLabel="End game"
+              submitting={sbButtonDisabled || !!sbWinner}
+              onClose={closeScoreboard}
+              title={`Set ${sbCurrentSetNumber} · Game ${sbCurrentGameNumber}`}
+            />
           ) : (
             // ─── MANUAL MODE — bulk game-score entry ───
             <ScrollView style={styles.sbManualScroll} contentContainerStyle={styles.sbManualContent}>
@@ -3618,7 +3835,201 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ─── Summary stat strip ───
+  // ─── Umpire focus view ───────────────────────────────────────────────────
+  uHeader: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E3F1E9',
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  uHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  uCourtBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#15A765',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  uHeaderLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#15A765',
+    letterSpacing: 1,
+  },
+  uHeaderCourt: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#12331F',
+    marginTop: 1,
+  },
+  uStatsRow: {
+    flexDirection: 'row',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F6',
+  },
+  uStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  uStatDivider: {
+    width: 1,
+    backgroundColor: '#EEF1FA',
+    alignSelf: 'stretch',
+  },
+  uStatVal: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1F2937',
+  },
+  uStatLbl: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginTop: 3,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  uSection: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+  },
+  uSectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#8A93A3',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  uCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EEF1FA',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 9,
+  },
+  uCardLive: {
+    borderColor: '#F5C6C6',
+    backgroundColor: '#FFF7F7',
+  },
+  uCardTop: {
+    flex: 1,
+    marginRight: 10,
+  },
+  uTeams: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  uVs: {
+    color: '#9CA3AF',
+    fontWeight: '600',
+  },
+  uWhen: {
+    fontSize: 11,
+    color: '#9198A5',
+    marginTop: 3,
+    fontWeight: '600',
+  },
+  uDoneSummary: {
+    fontSize: 12,
+    color: '#2E7D32',
+    marginTop: 3,
+    fontWeight: '700',
+  },
+  uScoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#15A765',
+    borderRadius: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  uScoreBtnLive: {
+    backgroundColor: '#E23B3B',
+  },
+  uScoreText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+    marginLeft: 5,
+  },
+  uEmpty: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+  },
+  uEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#3A4252',
+    marginTop: 12,
+  },
+  uEmptyText: {
+    fontSize: 12,
+    color: '#8A93A3',
+    textAlign: 'center',
+    marginTop: 5,
+    lineHeight: 17,
+  },
+  uStandingsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 20,
+    marginHorizontal: 16,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#CBEBD9',
+    backgroundColor: '#F0FBF5',
+  },
+  uStandingsText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#15A765',
+  },
+  uBackBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F0FBF5',
+    borderWidth: 1,
+    borderColor: '#CBEBD9',
+    alignSelf: 'flex-start',
+  },
+  uBackText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15A765',
+  },
   tournamentSummaryCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',

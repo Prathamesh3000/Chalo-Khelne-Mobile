@@ -32,8 +32,27 @@ const formatDDMMYYYY = (d) => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
-export default function DOBGateModal({ visible, onClose, onSaved }) {
-  const { user, token, updateUser } = useAuth();
+// Minimum self-managed age (Families Policy). Under-13s cannot hold their own
+// account — a parent/guardian must create and supervise it. Mirrors the server
+// check in authRoutes /register (code UNDER_13_SELF_SIGNUP).
+const MIN_SELF_MANAGED_AGE = 13;
+
+const ageFrom = (d) => {
+  if (!d) return null;
+  const t = new Date();
+  let a = t.getFullYear() - d.getFullYear();
+  const m = t.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && t.getDate() < d.getDate())) a--;
+  return a;
+};
+
+// `mandatory` turns this into a blocking gate: no close button, no back-out,
+// no dismiss-on-backdrop. Used by <DobGate> for accounts that have no DOB at
+// all (Google Sign-In, and legacy accounts predating the requirement), which
+// are locked out of every age-gated route server-side until this is filled in.
+export default function DOBGateModal({ visible, onClose, onSaved, mandatory = false }) {
+  const { user, token, updateUser, logout } = useAuth();
+  const [blockedUnder13, setBlockedUnder13] = useState(false);
 
   // Pre-fill from existing user values if the profile only has one of the
   // two fields — saves the player typing what's already there.
@@ -67,6 +86,13 @@ export default function DOBGateModal({ visible, onClose, onSaved }) {
       setError("Date of birth can't be in the future.");
       return;
     }
+    // Under-13 cannot hold a self-managed account. Refuse the save and show the
+    // parent-managed message rather than storing a DOB that would immediately
+    // put the account in a non-compliant state.
+    if (ageFrom(dob) < MIN_SELF_MANAGED_AGE) {
+      setBlockedUnder13(true);
+      return;
+    }
 
     const userId = user?._id || user?.id;
     if (!userId) {
@@ -94,7 +120,10 @@ export default function DOBGateModal({ visible, onClose, onSaved }) {
         throw new Error(data?.message || `Save failed (${res.status})`);
       }
 
-      const next = { ...user, dateOfBirth: body.dateOfBirth, sex: body.sex };
+      // `requiresDob` is cleared here (not by the caller) so the local user
+      // object never sits in a half-updated state where the blocking gate
+      // re-evaluates as still-required and flashes back open.
+      const next = { ...user, dateOfBirth: body.dateOfBirth, sex: body.sex, requiresDob: false };
       if (updateUser) await updateUser(next);
       onSaved?.(next);
     } catch (e) {
@@ -109,20 +138,58 @@ export default function DOBGateModal({ visible, onClose, onSaved }) {
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}
+      // In mandatory mode the Android hardware back button must not dismiss
+      // this — the account is locked until a DOB is supplied.
+      onRequestClose={mandatory ? () => {} : onClose}
     >
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          {blockedUnder13 ? (
+            <>
+              <View style={styles.header}>
+                <Text style={styles.title}>A parent needs to set this up</Text>
+              </View>
+              <Text style={styles.hint}>
+                Players under {MIN_SELF_MANAGED_AGE} can't have their own account. Ask a parent or
+                guardian to create one and add you to it, so they can manage your
+                activity and safety settings.
+              </Text>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={() => (mandatory ? logout?.() : onClose?.())}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.saveBtnText}>
+                  {mandatory ? "Sign out" : "Close"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setBlockedUnder13(false)}
+                style={{ paddingVertical: 12, alignItems: "center" }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 13, color: "#666" }}>
+                  I entered the wrong date
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+          <>
           <View style={styles.header}>
-            <Text style={styles.title}>Before you register</Text>
-            <TouchableOpacity onPress={onClose} disabled={saving}>
-              <Ionicons name="close" size={22} color="#999" />
-            </TouchableOpacity>
+            <Text style={styles.title}>
+              {mandatory ? "One last step" : "Before you register"}
+            </Text>
+            {!mandatory && (
+              <TouchableOpacity onPress={onClose} disabled={saving}>
+                <Ionicons name="close" size={22} color="#999" />
+              </TouchableOpacity>
+            )}
           </View>
 
           <Text style={styles.hint}>
-            Tournaments may have age or gender restrictions on categories. We
-            need this once to show you what you're eligible for.
+            {mandatory
+              ? "We need your date of birth to keep younger players safe and to show you the right tournament categories. You'll only be asked once."
+              : "Tournaments may have age or gender restrictions on categories. We need this once to show you what you're eligible for."}
           </Text>
 
           <Text style={styles.label}>Date of birth</Text>
@@ -189,6 +256,8 @@ export default function DOBGateModal({ visible, onClose, onSaved }) {
               <Text style={styles.saveBtnText}>Save & continue</Text>
             )}
           </TouchableOpacity>
+          </>
+          )}
         </View>
       </View>
     </Modal>

@@ -124,6 +124,30 @@ const TeamKnockouts = ({ route }) => {
   };
 
   // =====================================================
+  // TEAM-TIE VIEWER HELPERS
+  // Read the raw TeamKnockoutMatches shape (team1Id/team2Id populated, sets[]
+  // with per-rubber players) with fallbacks to any legacy transformed shape,
+  // so the read-only viewer renders correctly for Rapid Rallies + Davis Cup ties.
+  // =====================================================
+  const RR_FORMAT_ID = "rapid_rallies_s1";
+  const isRapidRallies = (m) =>
+    m?.formatId === RR_FORMAT_ID || String(m?.format || "").toLowerCase().includes("rapid");
+  const homeTeamName = (m) => m?.team1Id?.teamName || m?.team1?.name || "Team 1";
+  const awayTeamName = (m) => m?.team2Id?.teamName || m?.team2?.name || "Team 2";
+  const tieHomeSets = (m) => m?.setsWon?.home ?? m?.team1?.sets ?? 0;
+  const tieAwaySets = (m) => m?.setsWon?.away ?? m?.team2?.sets ?? 0;
+  const tieWinnerName = (m) =>
+    m?.matchWinner === "home" ? homeTeamName(m)
+      : m?.matchWinner === "away" ? awayTeamName(m)
+        : (m?.winningTeam?.name || m?.winnerId?.teamName || "");
+  // A tie's rubbers live on `sets[]` (raw) — fall back to a legacy `matches[]`.
+  const rubbersOf = (m) => (Array.isArray(m?.sets) && m.sets.length ? m.sets : (m?.matches || []));
+  const rubberScore = (s) => s?.score || `${s?.gamesWon?.home ?? 0}-${s?.gamesWon?.away ?? 0}`;
+  const rubberHomeSide = (s) => [s?.homePlayer, s?.homePlayerB].filter(Boolean).join(" & ");
+  // away partner is stored as awayPlayerB (Rapid Rallies) or awayPlayerZ (legacy).
+  const rubberAwaySide = (s) => [s?.awayPlayer, s?.awayPlayerB || s?.awayPlayerZ].filter(Boolean).join(" & ");
+
+  // =====================================================
   // UTILITY FUNCTIONS
   // =====================================================
   const getRoundName = (round) => {
@@ -526,7 +550,7 @@ const TeamKnockouts = ({ route }) => {
               style={styles.teamLogo}
             />
             <Text style={styles.teamNameText} numberOfLines={1}>
-              {match.team1?.name || "TBD"}
+              {homeTeamName(match)}
             </Text>
           </View>
 
@@ -534,7 +558,7 @@ const TeamKnockouts = ({ route }) => {
           <View style={styles.scoreContainer}>
             {match.status === "COMPLETED" ? (
               <Text style={styles.scoreText}>
-                {match.team1?.sets || 0} - {match.team2?.sets || 0}
+                {tieHomeSets(match)} - {tieAwaySets(match)}
               </Text>
             ) : match.status === "IN_PROGRESS" ? (
               <View style={styles.liveScoreContainer}>
@@ -554,7 +578,7 @@ const TeamKnockouts = ({ route }) => {
           {/* Team 2 */}
           <View style={styles.teamContainer}>
             <Text style={styles.teamNameText} numberOfLines={1}>
-              {match.team2?.name || "TBD"}
+              {awayTeamName(match)}
             </Text>
             <Image
               source={{ uri: match.team2?.image || "https://via.placeholder.com/40" }}
@@ -568,13 +592,13 @@ const TeamKnockouts = ({ route }) => {
           <View style={styles.matchFooter}>
             <MaterialIcons name="schedule" size={14} color="#666" />
             <Text style={styles.matchTime}>{formatTime(match.matchStartTime)}</Text>
-            {match.status === "COMPLETED" && match.winningTeam && (
+            {match.status === "COMPLETED" && tieWinnerName(match) ? (
               <>
                 <Text style={styles.footerDivider}>•</Text>
                 <MaterialIcons name="emoji-events" size={14} color="#FFD700" />
-                <Text style={styles.winnerText}>{match.winningTeam.name}</Text>
+                <Text style={styles.winnerText}>{tieWinnerName(match)}</Text>
               </>
-            )}
+            ) : null}
           </View>
         )}
       </TouchableOpacity>
@@ -638,11 +662,11 @@ const TeamKnockouts = ({ route }) => {
                     style={styles.teamDisplayLogo}
                   />
                   <Text style={styles.teamDisplayName}>
-                    {selectedMatch?.team1?.name || "Team 1"}
+                    {homeTeamName(selectedMatch)}
                   </Text>
                   {selectedMatch?.status === "COMPLETED" && (
                     <Text style={styles.teamSets}>
-                      {selectedMatch?.team1?.sets || 0} sets
+                      {tieHomeSets(selectedMatch)} sets
                     </Text>
                   )}
                 </View>
@@ -658,11 +682,11 @@ const TeamKnockouts = ({ route }) => {
                     style={styles.teamDisplayLogo}
                   />
                   <Text style={styles.teamDisplayName}>
-                    {selectedMatch?.team2?.name || "Team 2"}
+                    {awayTeamName(selectedMatch)}
                   </Text>
                   {selectedMatch?.status === "COMPLETED" && (
                     <Text style={styles.teamSets}>
-                      {selectedMatch?.team2?.sets || 0} sets
+                      {tieAwaySets(selectedMatch)} sets
                     </Text>
                   )}
                 </View>
@@ -783,7 +807,7 @@ const TeamKnockouts = ({ route }) => {
               </View>
 
               {/* View Scorecard Button */}
-              {selectedMatch?.matches && selectedMatch.matches.length > 0 && (
+              {rubbersOf(selectedMatch).length > 0 && (
                 <TouchableOpacity
                   style={styles.viewScorecardButton}
                   onPress={() => setShowScorecard(true)}
@@ -811,20 +835,42 @@ const TeamKnockouts = ({ route }) => {
               </View>
 
               {/* Sets Breakdown */}
-              {selectedMatch?.matches && selectedMatch.matches.length > 0 ? (
-                selectedMatch.matches.map((set, setIndex) => (
+              {rubbersOf(selectedMatch).length > 0 ? (
+                rubbersOf(selectedMatch).map((set, setIndex) => (
                   <View key={setIndex} style={styles.setContainer}>
                     {/* Set Header */}
                     <View style={styles.setHeader}>
                       <Text style={styles.setText}>Set {set.setNumber}</Text>
                       <Text style={styles.setType}>{set.type || "Standard"}</Text>
                       <Text style={styles.setScore}>
-                        {set.score || "0-0"}
+                        {rubberScore(set)}
                       </Text>
                     </View>
 
-                    {/* Captain's Pick Button — for doubles sets that need pairing selection */}
-                    {setNeedsPick(set) && (
+                    {/* Women's Singles marker (Rapid Rallies rubber 3) */}
+                    {isRapidRallies(selectedMatch) && set.setNumber === 3 ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 6 }}>
+                        <MaterialIcons name="female" size={13} color="#DB2777" />
+                        <Text style={{ color: "#DB2777", fontWeight: "700", fontSize: 11 }}>Women's Singles</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Players in this rubber (real names — singles or doubles pair) */}
+                    {(rubberHomeSide(set) || rubberAwaySide(set)) ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, paddingHorizontal: 4 }}>
+                        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#1F2937" }} numberOfLines={2}>
+                          {rubberHomeSide(set) || "TBD"}
+                        </Text>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#9CA3AF" }}>vs</Text>
+                        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#1F2937", textAlign: "right" }} numberOfLines={2}>
+                          {rubberAwaySide(set) || "TBD"}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {/* Captain's Pick Button — legacy Davis Cup only. Rapid Rallies
+                        picks happen on the web manager, so mobile stays read-only. */}
+                    {!isRapidRallies(selectedMatch) && setNeedsPick(set) && (
                       <TouchableOpacity
                         style={{
                           flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -859,15 +905,15 @@ const TeamKnockouts = ({ route }) => {
                       <View style={styles.setWinnerRow}>
                         <MaterialIcons name="emoji-events" size={16} color="#FFD700" />
                         <Text style={styles.setWinnerText}>
-                          Set won by {set.setWinner === "home" ? selectedMatch.team1?.name : selectedMatch.team2?.name}
+                          Set won by {set.setWinner === "home" ? homeTeamName(selectedMatch) : awayTeamName(selectedMatch)}
                         </Text>
                       </View>
                     )}
 
                     {/* Teams Row */}
                     <View style={styles.setTeamsRow}>
-                      <Text style={styles.setTeamName}>{selectedMatch?.team1?.name}</Text>
-                      <Text style={styles.setTeamName}>{selectedMatch?.team2?.name}</Text>
+                      <Text style={styles.setTeamName}>{homeTeamName(selectedMatch)}</Text>
+                      <Text style={styles.setTeamName}>{awayTeamName(selectedMatch)}</Text>
                     </View>
 
                     {/* Games Breakdown */}

@@ -87,7 +87,11 @@ Collapse the 4+ token-attachment mechanisms into **one** client. This is the fou
 
 ---
 
-## Phase 2 — TypeScript, leaf-inward  *(long-running, ~3–4 weeks of effort, parallel to P1–P6)*
+## Phase 2 — TypeScript, leaf-inward  *(long-running, ~3–4 weeks of effort, parallel to P1–P6)*  — 🚧 IN PROGRESS (started 2026-07-07)
+
+> **Progress:** `types/models.ts` (domain models: User/Sport/Booking/Tournament/Turf/TurfBooking/Listing/Story/Post/JobPosting/PlayerStats/AppNotification) + `types/index.ts` barrel added; `types/api.ts` envelope from P0. **✅ The entire `api/` layer is now TypeScript — all 21 modules converted** (playerStats, sportLibrary, news, notifications, chat, groupChat, invitations, planner, stories, donations, jobs, api, auth, cart, posts, trainers, trainerConsole, PlayerPayment, authFetch, managerPayment, tournaments). Param types annotated, fetched `data` stays `any` via `response.json()`, `.js` originals deleted (no dup-module ambiguity), default-export shapes preserved so all consumers resolve unchanged. `npm run typecheck` **exit 0** + `eslint src/api src/types` **0 errors/0 warnings**. **✅ `utils/` (9), `hooks/` (2), `components/` (15 + barrel), and `context/` (all 4) are now `.ts`/`.tsx`** (2026-07-08; typecheck exit 0, lint 0 errors). AuthContext.tsx exports typed `AuthContextValue`/`AuthUser`/`AuthSession` → `useAuth()` is typed app-wide and the `as any` casts are gone. Component props typed via interfaces; Ionicons `name` via `React.ComponentProps<typeof Ionicons>["name"]`; legacy polymorphic match/tournament shapes kept loose (`any`).
+
+**The entire non-screen surface is now TypeScript** (types/ api/ utils/ hooks/ components/ context/ + services/http). **NEXT:** **screens** (PlayerHome, TournamentDetails, Booking, Turf, Social first; leave 205KB TournamentLeaderboardDetail.js for last) + navigation/ + App.js + remaining services (tokenStore, NotificationService).
 
 Incremental, `allowJs: true`, app never stops. Convert in dependency order so types flow outward.
 

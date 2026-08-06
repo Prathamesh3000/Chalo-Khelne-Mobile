@@ -17,6 +17,7 @@ import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 import API from "../../api/api";
 import POSTS from "../../api/posts";
+import PLAYER_STATS from "../../api/playerStats";
 import { assetUrl } from "../../utils/assetUrl";
 
 const { width } = Dimensions.get("window");
@@ -56,6 +57,7 @@ const PlayerPublicProfile = ({ route, navigation }) => {
   const [followers, setFollowers] = useState(0);
   const [following, setFollowing] = useState(0);
   const [posts, setPosts] = useState([]);
+  const [career, setCareer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
 
@@ -66,9 +68,12 @@ const PlayerPublicProfile = ({ route, navigation }) => {
     }
     setLoading(true);
     try {
-      const [statusRes, postsRes] = await Promise.all([
+      const [statusRes, postsRes, statsRes] = await Promise.all([
         axios.get(API.ENDPOINTS.FOLLOW.STATUS(userId)),
         axios.get(POSTS.ENDPOINTS.BY_USER(userId)),
+        // Career stats are best-effort — a failure here must not blank the
+        // whole profile, so swallow it and keep the section hidden.
+        axios.get(PLAYER_STATS.ENDPOINTS.CAREER(userId)).catch(() => null),
       ]);
 
       const s = statusRes.data || {};
@@ -80,6 +85,8 @@ const PlayerPublicProfile = ({ route, navigation }) => {
 
       const body = postsRes.data;
       setPosts(Array.isArray(body) ? body : body?.posts || []);
+
+      if (statsRes?.data?.success) setCareer(statsRes.data);
     } catch (err) {
       console.error("[PlayerPublicProfile] load failed:", err);
     } finally {
@@ -123,6 +130,17 @@ const PlayerPublicProfile = ({ route, navigation }) => {
   const bio = profile?.bio || "";
   const avatar = profile?.profileImage ? assetUrl(profile.profileImage) : null;
 
+  // Career (tournament) stats — shown only once the player has actually played.
+  const careerAgg = career?.career || {};
+  const careerMatches = careerAgg.totalMatches || 0;
+  const hasCareer = careerMatches > 0;
+  const careerCells = [
+    { label: "Win Rate", value: `${careerAgg.winRate || 0}%` },
+    { label: "Matches", value: careerMatches },
+    { label: "Wins", value: careerAgg.totalWins || 0 },
+    { label: "Titles", value: careerAgg.championships || 0 },
+  ];
+
   const Stat = ({ value, label }) => (
     <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
@@ -161,6 +179,20 @@ const PlayerPublicProfile = ({ route, navigation }) => {
             {isFollowing ? "Following" : "Follow"}
           </Text>
         </TouchableOpacity>
+      )}
+
+      {hasCareer && (
+        <View style={styles.careerCard}>
+          <Text style={styles.careerTitle}>Tournament Stats</Text>
+          <View style={styles.careerRow}>
+            {careerCells.map((cell) => (
+              <View key={cell.label} style={styles.careerCell}>
+                <Text style={styles.careerValue}>{cell.value}</Text>
+                <Text style={styles.careerLabel}>{cell.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
       )}
 
       <Text style={styles.gridTitle}>Posts</Text>
@@ -287,6 +319,30 @@ const styles = StyleSheet.create({
   },
   followBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   followingBtnText: { color: "#15A765" },
+
+  careerCard: {
+    marginTop: 16,
+    backgroundColor: "#F7FBF9",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#DCEFE6",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+  },
+  careerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F7A4C",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  careerRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  careerCell: { alignItems: "center", flex: 1 },
+  careerValue: { fontSize: 18, fontWeight: "800", color: "#1A181B" },
+  careerLabel: { fontSize: 11, color: "#645E66", marginTop: 3 },
 
   gridTitle: {
     marginTop: 18,
