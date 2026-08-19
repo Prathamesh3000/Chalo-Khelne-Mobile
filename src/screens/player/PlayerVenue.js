@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
@@ -21,7 +22,7 @@ import TOURNAMENTS from "../../api/tournaments";
 import { useAuth } from "../../context/AuthContext";
 import { authFetch } from "../../api/authFetch";
 
-// ─── Helpers ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getSportIcon = (sportName) => {
   const sport = String(sportName || "").toLowerCase();
   if (sport.includes("basket")) return require("../../../assets/Basketball.png");
@@ -66,7 +67,7 @@ const calculateDistance = (turf) => {
   if (typeof turf?.distance === "string" || typeof turf?.distance === "number") {
     return `${turf.distance} km`;
   }
-  // Deterministic pseudo-random: hash id → 0.5..5.5 km
+  // Deterministic pseudo-random: hash id â†’ 0.5..5.5 km
   const id = String(turf?._id || "");
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 100000;
@@ -105,10 +106,10 @@ const PlayerVenue = ({ navigation }) => {
   const [availability, setAvailability] = useState({}); // { turfId: { availableSlots } }
   const [favorites, setFavorites] = useState(new Set()); // Set<turfId>
 
-  // ─── Fetchers ─────────────────────────────────────────────────────────
+  // â”€â”€â”€ Fetchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchTurfs = async () => {
     try {
-      // The list endpoint paginates (default 10, newest-first) — without a high
+      // The list endpoint paginates (default 10, newest-first) â€” without a high
       // limit older turfs are silently cut off. Request a large page so every
       // active turf loads on this browse screen.
       const response = await authFetch(`${API.ENDPOINTS.TURFS.BASE}?limit=500`);
@@ -159,7 +160,7 @@ const PlayerVenue = ({ navigation }) => {
   const fetchFavorites = async () => {
     if (!userId) return;
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await authFetch(API.ENDPOINTS.USER.USER_FAVORITES(userId), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -200,7 +201,7 @@ const PlayerVenue = ({ navigation }) => {
     }, [userId])
   );
 
-  // ─── Filtering ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Filtering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     let filtered = [...turfs];
 
@@ -230,7 +231,7 @@ const PlayerVenue = ({ navigation }) => {
     setFilteredTurfs(filtered);
   }, [turfs, searchQuery, selectedSport]);
 
-  // ─── Actions ──────────────────────────────────────────────────────────
+  // â”€â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleVoiceInput = () => {
     Alert.alert("Voice search", "Voice input integration coming soon");
   };
@@ -275,7 +276,7 @@ const PlayerVenue = ({ navigation }) => {
     navigation.navigate("TurfDetails", { turfId: turf._id });
   };
 
-  // ─── Render ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <View style={styles.container}>
       <ScrollView
@@ -415,12 +416,12 @@ const PlayerVenue = ({ navigation }) => {
                     </View>
 
                     <Text style={styles.cardLocation} numberOfLines={1}>
-                      {location} · {distance} away
+                      {location} Â· {distance} away
                     </Text>
 
                     <View style={styles.cardPriceRow}>
                       <Text style={styles.cardPrice}>
-                        ₹{minPrice != null ? minPrice : 0}/-{" "}
+                        â‚¹{minPrice != null ? minPrice : 0}/-{" "}
                         <Text style={styles.cardPriceUnit}>per hour</Text>
                       </Text>
                     </View>

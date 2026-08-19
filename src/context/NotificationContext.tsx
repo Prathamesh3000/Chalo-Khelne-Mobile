@@ -1,3 +1,4 @@
+﻿import { getToken } from "../services/tokenStore";
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -5,7 +6,6 @@ import axios from "axios";
 import { io, Socket } from "socket.io-client";
 import API from "../api/api";
 import NOTIFICATIONS from "../api/notifications";
-import { getToken } from "../services/tokenStore";
 
 export interface AppNotification {
   _id: string;
@@ -39,20 +39,20 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 
   const userId = user?._id || user?.id;
   // Club-staff (Manager / trainer / coach) accounts aren't in the User
-  // collection and have no player notifications — skip the whole flow for them
+  // collection and have no player notifications â€” skip the whole flow for them
   // (the User-scoped endpoints would 401).
   const isStaff = String(user?.role || "") === "Manager";
 
-  // ── Connect socket + listen for real-time notifications ──
+  // â”€â”€ Connect socket + listen for real-time notifications â”€â”€
   useEffect(() => {
     if (!userId || isStaff) return;
 
-    // Get token from AsyncStorage (more reliable than context state on app start)
     const connectSocket = async () => {
-      // Token lives in SecureStore now; AsyncStorage("auth_token") is null. Read
-      // the real token so the socket authenticates instead of connecting null.
-      const authToken =
-        token || (await getToken()) || (await AsyncStorage.getItem("auth_token"));
+      // Context state is not populated yet on app start, so fall back to the
+      // stored token. The old third fallback — AsyncStorage("auth_token") — was
+      // dead: tokenStore migrated the token to SecureStore and deleted the
+      // plaintext copy, so it could only ever return null.
+      const authToken = token || (await getToken());
       if (!authToken) return;
 
       const socket = io(API.SERVER_URL, {
@@ -90,7 +90,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     };
   }, [userId, token, isStaff]);
 
-  // ── Fetch notifications from API ──
+  // â”€â”€ Fetch notifications from API â”€â”€
   // Use bare axios so it carries the global Authorization header set on login;
   // AsyncStorage("auth_token") is null (the token lives in SecureStore).
   const fetchNotifications = useCallback(async () => {
@@ -106,7 +106,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     }
   }, [userId, isStaff]);
 
-  // ── Fetch unread count ──
+  // â”€â”€ Fetch unread count â”€â”€
   const fetchUnreadCount = useCallback(async () => {
     if (!userId || isStaff) return;
     try {
@@ -117,7 +117,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     } catch {}
   }, [userId, isStaff]);
 
-  // ── Initial fetch + polling ──
+  // â”€â”€ Initial fetch + polling â”€â”€
   useEffect(() => {
     if (userId) {
       fetchNotifications();
@@ -128,16 +128,16 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     }
   }, [userId, fetchNotifications, fetchUnreadCount]);
 
-  // ── Toggle notification panel ──
-  const toggleNotifications = () => {
+  // â”€â”€ Toggle notification panel â”€â”€
+  const toggleNotifications = useCallback(() => {
     if (!isNotificationsOpen) fetchNotifications();
-    setIsNotificationsOpen(!isNotificationsOpen);
-  };
+    setIsNotificationsOpen((prev) => !prev);
+  }, [isNotificationsOpen, fetchNotifications]);
 
-  const closeNotifications = () => setIsNotificationsOpen(false);
+  const closeNotifications = useCallback(() => setIsNotificationsOpen(false), []);
 
-  // ── Mark single as read ──
-  const markAsRead = async (notificationId: string) => {
+  // â”€â”€ Mark single as read â”€â”€
+  const markAsRead = useCallback(async (notificationId: string) => {
     try {
       // Bare axios carries the global Authorization header (set in AuthContext).
       await axios.put(NOTIFICATIONS.MARK_READ(notificationId), {});
@@ -148,10 +148,10 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     } catch (err: any) {
       console.error("[NOTIF] Mark read error:", err.message);
     }
-  };
+  }, []);
 
-  // ── Mark all as read ──
-  const markAllAsRead = async () => {
+  // â”€â”€ Mark all as read â”€â”€
+  const markAllAsRead = useCallback(async () => {
     if (!userId) return;
     try {
       await axios.put(NOTIFICATIONS.MARK_ALL_READ(userId), {});
@@ -160,28 +160,43 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     } catch (err: any) {
       console.error("[NOTIF] Mark all read error:", err.message);
     }
-  };
+  }, [userId]);
 
-  // ── Handle push notification received in foreground ──
-  const handleReceivedNotification = (_notification?: any) => {
+  // â”€â”€ Handle push notification received in foreground â”€â”€
+  const handleReceivedNotification = useCallback((_notification?: any) => {
     setUnreadCount((prev) => prev + 1);
     if (isNotificationsOpen) fetchNotifications();
-  };
+  }, [isNotificationsOpen, fetchNotifications]);
+
+  // Memoized so consumers of useNotifications() don't re-render on every
+  // provider render â€” only when a real value changes.
+  const value = React.useMemo<NotificationContextValue>(
+    () => ({
+      notifications,
+      unreadCount,
+      isNotificationsOpen,
+      toggleNotifications,
+      closeNotifications,
+      markAsRead,
+      markAllAsRead,
+      fetchNotifications,
+      handleReceivedNotification,
+    }),
+    [
+      notifications,
+      unreadCount,
+      isNotificationsOpen,
+      toggleNotifications,
+      closeNotifications,
+      markAsRead,
+      markAllAsRead,
+      fetchNotifications,
+      handleReceivedNotification,
+    ]
+  );
 
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        isNotificationsOpen,
-        toggleNotifications,
-        closeNotifications,
-        markAsRead,
-        markAllAsRead,
-        fetchNotifications,
-        handleReceivedNotification,
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );

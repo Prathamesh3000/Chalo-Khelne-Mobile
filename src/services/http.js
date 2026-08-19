@@ -84,6 +84,25 @@ export async function performRefresh() {
   return data.token;
 }
 
+// Single in-flight refresh shared by EVERY caller — the axios interceptor and
+// api/authFetch alike.
+//
+// Refresh tokens rotate: performRefresh posts the stored token and the server
+// returns a replacement, revoking the old one. Two refreshes racing with the
+// same old token means the second posts a token that no longer exists, fails,
+// and logs the user out mid-session. The axios interceptor guarded its own
+// path, but a fetch-based 401 and an axios 401 firing together had nothing
+// coordinating them.
+let _sharedRefresh = null;
+
+export function refreshAccessToken() {
+  if (_sharedRefresh) return _sharedRefresh;
+  _sharedRefresh = performRefresh().finally(() => {
+    _sharedRefresh = null;
+  });
+  return _sharedRefresh;
+}
+
 /**
  * Attach the request + response interceptors to the shared axios client.
  * Idempotent — safe to call more than once. Call once at app startup.
@@ -134,7 +153,9 @@ export function attachAuthInterceptors() {
       original._retry = true;
       _isRefreshing = true;
       try {
-        const newToken = await performRefresh();
+        // Shared so a concurrent fetch-based 401 does not start a second
+        // rotation with the same refresh token.
+        const newToken = await refreshAccessToken();
         _flushQueue(null, newToken);
         original.headers = original.headers || {};
         original.headers.Authorization = `Bearer ${newToken}`;

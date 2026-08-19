@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -15,6 +16,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import tournamentConfig from "../../api/tournaments";
 import { authFetch } from "../../api/authFetch";
+import withErrorBoundary from "../../components/withErrorBoundary";
 
 const TeamKnockouts = ({ route }) => {
   // =====================================================
@@ -140,7 +142,7 @@ const TeamKnockouts = ({ route }) => {
     m?.matchWinner === "home" ? homeTeamName(m)
       : m?.matchWinner === "away" ? awayTeamName(m)
         : (m?.winningTeam?.name || m?.winnerId?.teamName || "");
-  // A tie's rubbers live on `sets[]` (raw) — fall back to a legacy `matches[]`.
+  // A tie's rubbers live on `sets[]` (raw) â€” fall back to a legacy `matches[]`.
   const rubbersOf = (m) => (Array.isArray(m?.sets) && m.sets.length ? m.sets : (m?.matches || []));
   const rubberScore = (s) => s?.score || `${s?.gamesWon?.home ?? 0}-${s?.gamesWon?.away ?? 0}`;
   const rubberHomeSide = (s) => [s?.homePlayer, s?.homePlayerB].filter(Boolean).join(" & ");
@@ -233,7 +235,7 @@ const TeamKnockouts = ({ route }) => {
           onPress: async () => {
             setRrGenerating(true);
             try {
-              const token = await AsyncStorage.getItem("auth_token");
+              const token = await getToken();
               const res = await authFetch(
                 `${tournamentConfig.BASE_URL}/tournaments/team-knockout/round-robin/generate`,
                 {
@@ -276,7 +278,7 @@ const TeamKnockouts = ({ route }) => {
   };
 
   // =====================================================
-  // CAPTAIN'S PICK — Doubles Pairing Selection
+  // CAPTAIN'S PICK â€” Doubles Pairing Selection
   // =====================================================
 
   // Check if a set needs captain's pick (doubles set without selection)
@@ -343,10 +345,14 @@ const TeamKnockouts = ({ route }) => {
   // =====================================================
   // TEAM CARD COMPONENT
   // =====================================================
-  const TeamCard = ({ team, index }) => {
+  // Inline render-function (NOT a component rendered as <TeamCard/>): defining a
+  // component inside render gives it a new type every render, remounting every
+  // card on any state change. Calling it as a function reconciles in place.
+  const renderTeamCard = (team, index) => {
     const isSelected = selectedTeamIds.includes(team._id);
     return (
       <TouchableOpacity
+        key={team._id || index}
         style={[styles.teamCard, isSelected && styles.teamCardSelected]}
         onPress={() => {
           if (selectAllMode || selectedTeamIds.length > 0) {
@@ -492,12 +498,13 @@ const TeamKnockouts = ({ route }) => {
   // =====================================================
   // MATCH CARD COMPONENT
   // =====================================================
-  const MatchCard = ({ match }) => {
+  const renderMatchCard = (match) => {
     const isBye = match.isBye || match.status === "BYE";
     const statusColor = getStatusColor(match.status);
 
     return (
       <TouchableOpacity
+        key={match._id}
         style={[
           styles.matchCard,
           { borderLeftColor: statusColor, borderLeftWidth: 4 },
@@ -594,7 +601,7 @@ const TeamKnockouts = ({ route }) => {
             <Text style={styles.matchTime}>{formatTime(match.matchStartTime)}</Text>
             {match.status === "COMPLETED" && tieWinnerName(match) ? (
               <>
-                <Text style={styles.footerDivider}>•</Text>
+                <Text style={styles.footerDivider}>â€¢</Text>
                 <MaterialIcons name="emoji-events" size={14} color="#FFD700" />
                 <Text style={styles.winnerText}>{tieWinnerName(match)}</Text>
               </>
@@ -855,7 +862,7 @@ const TeamKnockouts = ({ route }) => {
                       </View>
                     ) : null}
 
-                    {/* Players in this rubber (real names — singles or doubles pair) */}
+                    {/* Players in this rubber (real names â€” singles or doubles pair) */}
                     {(rubberHomeSide(set) || rubberAwaySide(set)) ? (
                       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, paddingHorizontal: 4 }}>
                         <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#1F2937" }} numberOfLines={2}>
@@ -868,7 +875,7 @@ const TeamKnockouts = ({ route }) => {
                       </View>
                     ) : null}
 
-                    {/* Captain's Pick Button — legacy Davis Cup only. Rapid Rallies
+                    {/* Captain's Pick Button â€” legacy Davis Cup only. Rapid Rallies
                         picks happen on the web manager, so mobile stays read-only. */}
                     {!isRapidRallies(selectedMatch) && setNeedsPick(set) && (
                       <TouchableOpacity
@@ -1150,9 +1157,7 @@ const TeamKnockouts = ({ route }) => {
             )}
 
             {teams.length > 0 ? (
-              teams.map((team, index) => (
-                <TeamCard key={team._id || index} team={team} index={index} />
-              ))
+              teams.map((team, index) => renderTeamCard(team, index))
             ) : (
               <View style={styles.emptyState}>
                 <MaterialIcons name="groups" size={64} color="#CCC" />
@@ -1177,9 +1182,7 @@ const TeamKnockouts = ({ route }) => {
                         <MaterialIcons name="emoji-events" size={24} color="#FF3B30" />
                         <Text style={styles.roundTitle}>{getRoundName(round)}</Text>
                       </View>
-                      {roundMatches.map((match) => (
-                        <MatchCard key={match._id} match={match} />
-                      ))}
+                      {roundMatches.map((match) => renderMatchCard(match))}
                     </View>
                   );
                 })
@@ -1937,4 +1940,6 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TeamKnockouts;
+// Â§5.2 â€” own boundary so one malformed record crashes THIS screen
+// rather than the whole app; Back still works and the nav stack survives.
+export default withErrorBoundary(TeamKnockouts, "these team knockouts");

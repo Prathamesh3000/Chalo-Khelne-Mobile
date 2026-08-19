@@ -49,7 +49,6 @@ const Event = ({ navigation }) => {
   const [filteredTournaments, setFilteredTournaments] = useState([]);
   const { user, isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
-  const scrollY = useRef(new Animated.Value(0)).current;
 
   // Always land on the default "Events" tab when leaving the screen, so coming
   // back from another tab (e.g. Social) never shows the Leaderboard tab stuck.
@@ -66,7 +65,8 @@ const Event = ({ navigation }) => {
     Animated.timing(tabValue, {
       toValue: activeTab === "Events" ? 0 : 1,
       duration: 250,
-      useNativeDriver: false,
+      // Native driver: the pill moves via translateX (transform), not `left`.
+      useNativeDriver: true,
     }).start();
   }, [activeTab]);
 
@@ -708,10 +708,6 @@ const Event = ({ navigation }) => {
         style={styles.scrollContainer}
         stickyHeaderIndices={[1]}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -735,10 +731,15 @@ const Event = ({ navigation }) => {
                 styles.activeTabPill,
                 {
                   width: TAB_PILL_WIDTH,
-                  left: tabValue.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [TAB_PAD, TAB_PAD + TAB_PILL_WIDTH],
-                  }),
+                  // translateX (native-driver friendly) instead of animating `left`.
+                  transform: [
+                    {
+                      translateX: tabValue.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [TAB_PAD, TAB_PAD + TAB_PILL_WIDTH],
+                      }),
+                    },
+                  ],
                 },
               ]}
             />

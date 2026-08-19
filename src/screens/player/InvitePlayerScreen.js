@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
@@ -112,7 +113,7 @@ export default function InvitePlayerScreen() {
 
   const fetchSentInvitations = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(INVITATIONS.SENT(user._id || user.id), {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -140,7 +141,7 @@ export default function InvitePlayerScreen() {
   const fetchDefaultPlayers = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(INVITATIONS.DEFAULT_PLAYERS, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -182,7 +183,7 @@ export default function InvitePlayerScreen() {
     if (searchTimer) clearTimeout(searchTimer);
     const timer = setTimeout(async () => {
       try {
-        const token = await AsyncStorage.getItem("auth_token");
+        const token = await getToken();
         const res = await axios.get(
           `${API.SERVER_URL}/api/search?query=${encodeURIComponent(text)}`,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -222,7 +223,7 @@ export default function InvitePlayerScreen() {
   const searchPlayers = async (query) => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(
         `${INVITATIONS.SEARCH_PLAYERS}?q=${encodeURIComponent(query)}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -258,7 +259,7 @@ export default function InvitePlayerScreen() {
         Alert.alert("Error", "Please select at least one player.");
         return;
       }
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const receiver_ids = selectedPlayers.map((p) => p._id);
 
       const res = await axios.post(
@@ -687,7 +688,7 @@ export default function InvitePlayerScreen() {
                     <Ionicons name="time-outline" size={14} color="#9CA3AF" />
                     <Text style={s.reviewPillText}>
                       {startTime && endTime
-                        ? `${startTime} – ${endTime}`
+                        ? `${startTime} â€“ ${endTime}`
                         : startTime || endTime}
                     </Text>
                   </View>

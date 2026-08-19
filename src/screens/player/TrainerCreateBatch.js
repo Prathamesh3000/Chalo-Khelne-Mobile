@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState } from "react";
 import {
   View,
@@ -90,7 +91,7 @@ const TrainerCreateBatch = () => {
     };
     try {
       setSubmitting(true);
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(TRAINER.CREATE_BATCH, payload, { headers: { Authorization: `Bearer ${token}` } });
       if (res.data?.success) {
         Alert.alert("Batch created", "", [{ text: "OK", onPress: () => navigation.goBack() }]);
@@ -178,8 +179,8 @@ const TrainerCreateBatch = () => {
         <Label>Assigned Venue</Label>
         <TextInput style={styles.input} placeholder="e.g. City Sports Complex, Hall B" placeholderTextColor="#9A9A9A" value={venue} onChangeText={setVenue} />
 
-        <Label>Monthly Fee (₹)</Label>
-        <TextInput style={styles.input} placeholder="₹ 0" placeholderTextColor="#9A9A9A" keyboardType="numeric" value={fee} onChangeText={setFee} />
+        <Label>Monthly Fee (â‚¹)</Label>
+        <TextInput style={styles.input} placeholder="â‚¹ 0" placeholderTextColor="#9A9A9A" keyboardType="numeric" value={fee} onChangeText={setFee} />
 
         <Label>Description</Label>
         <TextInput

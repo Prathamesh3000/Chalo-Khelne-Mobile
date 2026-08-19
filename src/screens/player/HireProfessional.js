@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -54,7 +55,7 @@ const mapProfessional = (p) => {
     location: p.city || p.userId?.address || "",
     sport,
     licenses: (p.certificates || []).map((c) => c.name).filter(Boolean),
-    rate: `₹${(p.rateAmount || 0).toLocaleString("en-IN")}/-`,
+    rate: `â‚¹${(p.rateAmount || 0).toLocaleString("en-IN")}/-`,
     rateUnit: RATE_UNIT_LABELS[p.rateType] || "per hour",
     note: p.negotiable ? "Negotiable" : "",
     about: p.about || "",
@@ -80,7 +81,7 @@ const SAMPLE_PROS = [
     location: "Mumbai",
     sport: "Cricket",
     licenses: ["ICC Level 2 Umpire", "UEFA B License"],
-    rate: "₹1,200/-",
+    rate: "â‚¹1,200/-",
     rateUnit: "per hour",
     note: "Weekend only",
     avatar: require("../../../assets/person.webp"),
@@ -94,7 +95,7 @@ const SAMPLE_PROS = [
     location: "Mumbai",
     sport: "Cricket",
     licenses: ["ICC Level 2 Umpire", "UEFA B License"],
-    rate: "₹1,200/-",
+    rate: "â‚¹1,200/-",
     rateUnit: "per hour",
     note: "Weekend only",
     avatar: require("../../../assets/person.webp"),
@@ -108,7 +109,7 @@ const SAMPLE_PROS = [
     location: "Mumbai",
     sport: "Cricket",
     licenses: [],
-    rate: "₹1,200/-",
+    rate: "â‚¹1,200/-",
     rateUnit: "per hour",
     note: "Weekend only",
     avatar: require("../../../assets/cricket-avatar.jpg"),
@@ -176,7 +177,7 @@ const HireProfessional = () => {
     setLoadingPros(true);
     setLoadError(false);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(JOBS.PROFESSIONALS, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -240,7 +241,7 @@ const HireProfessional = () => {
     }
     try {
       setSending(true);
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(
         JOBS.SEND_HIRE,
         {
@@ -537,7 +538,7 @@ const HireProfessional = () => {
                   <Text style={styles.statSub}>Experience</Text>
                 </View>
                 <View style={styles.statCard}>
-                  <Text style={styles.statTitle}>{selectedPro?.location || "—"}</Text>
+                  <Text style={styles.statTitle}>{selectedPro?.location || "â€”"}</Text>
                   <Text style={styles.statSub}>Locations</Text>
                 </View>
               </View>
@@ -561,7 +562,7 @@ const HireProfessional = () => {
               {/* About */}
               <Text style={styles.sectionHeading}>About us</Text>
               <Text style={styles.aboutText}>
-                {selectedPro?.about || "—"}
+                {selectedPro?.about || "â€”"}
               </Text>
 
               {/* Certifications */}
@@ -575,7 +576,7 @@ const HireProfessional = () => {
                   ))
                 ) : (
                   <View style={styles.certChip}>
-                    <Text style={styles.certText}>—</Text>
+                    <Text style={styles.certText}>â€”</Text>
                   </View>
                 )}
               </View>
@@ -642,7 +643,7 @@ const HireProfessional = () => {
                   <Text style={styles.proSummaryRole}>{selectedPro?.role}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.proSummaryRate}>{selectedPro?.rate || "—"}</Text>
+                  <Text style={styles.proSummaryRate}>{selectedPro?.rate || "â€”"}</Text>
                   <Text style={styles.proSummaryUnit}>{selectedPro?.rateUnit || "per hour"}</Text>
                 </View>
               </View>
@@ -712,13 +713,13 @@ const HireProfessional = () => {
               <Text style={styles.fieldLabel}>Offer Payment</Text>
               <TextInput
                 style={[styles.fieldInput, form.offerPayment ? { color: "#333333" } : null]}
-                placeholder="e.g., ₹2,500"
+                placeholder="e.g., â‚¹2,500"
                 placeholderTextColor="#9A9A9A"
                 value={form.offerPayment}
                 onChangeText={(v) => updateField("offerPayment", v)}
               />
               <Text style={styles.fieldHint}>
-                Suggested: {selectedPro?.rate || "—"} {selectedPro?.rateUnit || "per hour"}
+                Suggested: {selectedPro?.rate || "â€”"} {selectedPro?.rateUnit || "per hour"}
               </Text>
 
               <Text style={styles.fieldLabel}>

@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState } from "react";
 import {
   View,
@@ -72,7 +73,7 @@ const CreateListingScreen = () => {
 
     setSaving(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const payload = {
         ...form,
         originalPrice: Number(form.originalPrice) || 0,
@@ -216,7 +217,7 @@ const CreateListingScreen = () => {
           {/* Prices */}
           <View style={styles.priceRow}>
             <View style={styles.priceField}>
-              <Text style={styles.label}>Original Price (₹)</Text>
+              <Text style={styles.label}>Original Price (â‚¹)</Text>
               <TextInput
                 style={styles.input}
                 value={form.originalPrice}
@@ -228,7 +229,7 @@ const CreateListingScreen = () => {
             </View>
             {!isDonation && (
               <View style={styles.priceField}>
-                <Text style={styles.label}>Asking Price (₹)</Text>
+                <Text style={styles.label}>Asking Price (â‚¹)</Text>
                 <TextInput
                   style={styles.input}
                   value={form.askingPrice}

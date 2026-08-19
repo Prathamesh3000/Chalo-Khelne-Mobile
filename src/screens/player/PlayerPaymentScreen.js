@@ -26,6 +26,7 @@ import * as Sharing from "expo-sharing"; // ✅ for system share sheet
 import * as Clipboard from "expo-clipboard"; // ✅ for copying links/text
 import { showMessage } from "react-native-flash-message";
 import managerPaymentAPI from "../../api/managerPayment";
+import PlayerPaymentAPI from "../../api/PlayerPayment";
 import CouponInput from "../../components/CouponInput";
 
 const QRPaymentScreen = ({ navigation, route }) => {
@@ -57,6 +58,42 @@ const QRPaymentScreen = ({ navigation, route }) => {
   const [transactionId, setTransactionId] = useState("");
   const [uploadedImage, setUploadedImage] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  // Coupon the player applied. Only the CODE travels to the server — the
+  // discount, the caps and the ledger amounts are all derived server-side at
+  // redemption time (§2.7). Previously the applied coupon changed a number on
+  // this screen and nothing else.
+  const [appliedCouponCode, setAppliedCouponCode] = useState(null);
+
+  // Pick the payment screenshot the manager will review (§2.5).
+  const pickScreenshot = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showMessage({
+          message: "Permission needed",
+          description: "Allow photo access to attach your payment screenshot.",
+          type: "warning",
+          duration: 3000,
+        });
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.length) {
+        setUploadedImage(result.assets[0].uri);
+      }
+    } catch (err) {
+      console.error("Failed to pick screenshot:", err);
+      showMessage({
+        message: "Could not open photos",
+        description: "Please try again.",
+        type: "danger",
+        duration: 3000,
+      });
+    }
+  };
 
   const [manager, setManager] = useState(null);
   const [qrCode, setQrCode] = useState(null);
@@ -233,8 +270,10 @@ const QRPaymentScreen = ({ navigation, route }) => {
       const bookingPayload = {
         userId,
         userName: bookingData?.userName || "Player",
-        userEmail: bookingData?.userEmail || "player@example.com",
-        userPhone: bookingData?.userPhone || "N/A",
+        // §5.4 — no placeholder identity. "player@example.com" / "N/A" used to
+        // be sent when the profile fields were missing; the server now reads
+        // the real contact details from the player's account and ignores these
+        // entirely, so sending fake values only risks them being believed.
         tournamentId,
         tournamentName: tournament?.name || "Tournament",
         tournamentType: getTournamentType(tournament) || "N/A",
@@ -251,7 +290,15 @@ const QRPaymentScreen = ({ navigation, route }) => {
           ? bookingData.totalFee
           : Number(amount ?? 0)),
         employeeId: bookingData?.employeeId || null,
+        // Coupon CODE only — the server evaluates and claims it inside the
+        // booking transaction (§2.7).
+        couponCode: appliedCouponCode || undefined,
       };
+
+      // NOTE on the money fields above (paymentAmount / totalFee / per-selection
+      // fees): the server IGNORES them and re-derives every price from the
+      // tournament's category fees (§2.4). They are sent only for backward
+      // compatibility with older builds and carry no authority.
 
       const response = await axios.post(
         TournamentConfig.ENDPOINTS.BOOKINGS.CREATE,
@@ -259,6 +306,35 @@ const QRPaymentScreen = ({ navigation, route }) => {
       );
 
       if (response.data?.success) {
+        // ── Submit the payment proof (§2.5) ──────────────────────────────
+        // This is the step that never existed. The booking was created and the
+        // manager was notified, but the transaction reference and screenshot
+        // went nowhere: the reference was dropped by the schema (§2.6) and no
+        // PlayerPayment record could be created, so "Payment Reviews" was
+        // always empty and a disputed payment had no evidence on either side.
+        try {
+          await PlayerPaymentAPI.uploadProof({
+            tournamentId,
+            paymentMethod: "upi",
+            transactionId: transactionId.trim(),
+            bookingId: response.data?.booking?._id || bookingId || null,
+            screenshotUri: uploadedImage,
+          });
+        } catch (proofError) {
+          // The registration itself succeeded — do not fail the flow, but be
+          // explicit that the manager has nothing to verify against yet.
+          console.error("Failed to submit payment proof:", proofError);
+          showMessage({
+            message: "Proof not submitted",
+            description:
+              proofError?.message ||
+              "Your registration was created, but the payment proof could not be uploaded. You can re-submit from your bookings.",
+            type: "warning",
+            icon: "warning",
+            duration: 5000,
+          });
+        }
+
         try {
           const notifyRes = await managerPaymentAPI.notifyManager(managerId, tournamentId, {
             userId,
@@ -360,6 +436,9 @@ const QRPaymentScreen = ({ navigation, route }) => {
               applicableId={tournamentId}
               userId={userId}
               onApply={(data) => {
+                // Remember the CODE so it reaches createBooking. The preview
+                // below is display only; the server re-derives the discount.
+                setAppliedCouponCode(data.code || null);
                 showMessage({
                   message: "Coupon Applied!",
                   description: `You save ₹${data.discount_amount}. Pay ₹${data.final_amount} instead of ₹${data.original_amount}`,
@@ -368,6 +447,7 @@ const QRPaymentScreen = ({ navigation, route }) => {
                 });
               }}
               onRemove={() => {
+                setAppliedCouponCode(null);
                 showMessage({
                   message: "Coupon Removed",
                   type: "info",
@@ -479,6 +559,40 @@ const QRPaymentScreen = ({ navigation, route }) => {
             </View>
           )}
 
+
+          {/* Payment screenshot (§2.5) — the proof the manager reviews.
+              `uploadedImage` state existed here but nothing ever set it and
+              nothing rendered a picker, so no screenshot was ever captured. */}
+          <View style={styles.inputSection}>
+            <View style={styles.inputContainer}>
+              <Ionicons name="image-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+              <Text style={styles.inputLabel}>Payment Screenshot</Text>
+            </View>
+            <Text style={styles.inputSubLabel}>
+              Attach a screenshot of your payment confirmation
+            </Text>
+
+            {uploadedImage ? (
+              <View style={styles.uploadedImageContainer}>
+                <Image source={{ uri: uploadedImage }} style={styles.uploadedImage} />
+                <TouchableOpacity
+                  onPress={() => setUploadedImage(null)}
+                  accessibilityLabel="Remove payment screenshot"
+                >
+                  <Text style={styles.copyText}>Remove screenshot</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.textInput}
+                onPress={pickScreenshot}
+                accessibilityLabel="Attach payment screenshot"
+                accessibilityHint="Opens your photo library to choose a payment screenshot"
+              >
+                <Text style={{ color: "#9CA3AF" }}>Tap to choose an image</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Transaction ID Input */}
           <View style={styles.inputSection}>

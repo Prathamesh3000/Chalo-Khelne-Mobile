@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useRef, useState, useEffect } from "react";
 import {
   Animated,
@@ -55,7 +56,7 @@ const TurfImage = ({ source, style }) => {
   );
 };
 
-// New accounts have no profileImage — show a clean initials avatar instead of a
+// New accounts have no profileImage â€” show a clean initials avatar instead of a
 // stock person photo (which looked like a real, unrelated person).
 const initialsOf = (name) => {
   const n = String(name || "").trim();
@@ -100,7 +101,7 @@ const PlayerHomeScreen = () => {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const notificationPanelX = useRef(new Animated.Value(windowWidth)).current;
 
-  // Sidebar state — windowWidth must be declared above this line.
+  // Sidebar state â€” windowWidth must be declared above this line.
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const sidebarX = useRef(new Animated.Value(-windowWidth)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -147,7 +148,7 @@ const PlayerHomeScreen = () => {
 
   const fetchFreshUserData = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       if (token && user?.id) {
         const response = await authFetch(AUTH.ENDPOINTS.CURRENT_USER, {
           headers: {
@@ -348,7 +349,7 @@ const PlayerHomeScreen = () => {
     }
   };
 
-  // Preserved (old sidebar/hamburger animation handlers — not wired to new UI).
+  // Preserved (old sidebar/hamburger animation handlers â€” not wired to new UI).
   const toggleSidebar = () => {
     Animated.timing(translateX, {
       toValue: isOpen ? -width : 0,
@@ -423,15 +424,15 @@ const PlayerHomeScreen = () => {
                 const minFee = Math.min(...fees);
                 const maxFee = Math.max(...fees);
                 if (minFee === maxFee) {
-                  return `₹ ${minFee}`;
+                  return `â‚¹ ${minFee}`;
                 } else {
-                  return `₹ ${minFee} - ₹ ${maxFee}`;
+                  return `â‚¹ ${minFee} - â‚¹ ${maxFee}`;
                 }
               }
             }
             return tournament.tournamentFee
-              ? `₹ ${tournament.tournamentFee}/- onward`
-              : "₹ 0/- onward";
+              ? `â‚¹ ${tournament.tournamentFee}/- onward`
+              : "â‚¹ 0/- onward";
           })(),
           startTime: tournament.startTime || "11.00am",
           closingDate: `Booking closes on: ${formatDate(
@@ -894,7 +895,7 @@ const PlayerHomeScreen = () => {
                     onPress={() =>
                       navigation.navigate("SportDetails", {
                         // Go straight to this sport's page. Slug is derived the
-                        // same way the backend generates it (name → lower, spaces→-),
+                        // same way the backend generates it (name â†’ lower, spacesâ†’-),
                         // and name is passed so the header shows while it fetches.
                         sport: {
                           name: item.name,
@@ -911,7 +912,7 @@ const PlayerHomeScreen = () => {
                 ))}
               </ScrollView>
 
-              {/* Popular Turfs Near You (Horizontal) — wired to fetchTurfs */}
+              {/* Popular Turfs Near You (Horizontal) â€” wired to fetchTurfs */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Popular Turfs Near You</Text>
               </View>
@@ -962,7 +963,7 @@ const PlayerHomeScreen = () => {
                 </View>
               )}
 
-              {/* Popular Events Near You (Vertical list) — wired to fetchTournaments */}
+              {/* Popular Events Near You (Vertical list) â€” wired to fetchTournaments */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Popular Events Near You</Text>
               </View>
@@ -1141,7 +1142,7 @@ const PlayerHomeScreen = () => {
         )}
       </View>
 
-      {/* Notification Side Panel — full content preserved from previous version */}
+      {/* Notification Side Panel â€” full content preserved from previous version */}
       <Animated.View
         style={[
           styles.notificationPanel,
@@ -1213,7 +1214,7 @@ const PlayerHomeScreen = () => {
         )}
       </Animated.View>
 
-      {/* Sidebar Overlay — green gradient panel matching Figma */}
+      {/* Sidebar Overlay â€” green gradient panel matching Figma */}
       {sidebarVisible && (
         <View style={styles.sidebarOverlay} pointerEvents="box-none">
           <Animated.View style={[styles.sidebarBackdrop, { opacity: backdropOpacity }]}>

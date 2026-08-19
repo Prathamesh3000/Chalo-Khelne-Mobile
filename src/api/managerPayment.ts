@@ -1,10 +1,10 @@
+﻿import { getToken } from "../services/tokenStore";
 import API from "./api";
-import { getToken } from "../services/tokenStore";
 
 const { BASE_URL, Wbsite_SERVER_URL } = API;
 
 // These helpers use raw fetch (not the axios instance), so they must attach the
-// auth token themselves — otherwise the secured payment routes return 401.
+// auth token themselves â€” otherwise the secured payment routes return 401.
 const authHeaders = async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
   const token = await getToken();
   return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };

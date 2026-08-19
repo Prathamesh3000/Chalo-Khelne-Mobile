@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -86,7 +87,7 @@ const DonationDetailScreen = () => {
   const handleClaim = async () => {
     setClaiming(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(
         DONATIONS.ENDPOINTS.CLAIM(listingId),
         { paymentMethod, buyerContact },
@@ -112,7 +113,7 @@ const DonationDetailScreen = () => {
     }
     setUploading(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       await axios.post(
         DONATIONS.ENDPOINTS.PAY(listingId),
         { transactionId, paymentMethod },
@@ -133,7 +134,7 @@ const DonationDetailScreen = () => {
 
   const handleVerify = async (action) => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(
         DONATIONS.ENDPOINTS.VERIFY(listingId),
         { action },
@@ -149,8 +150,8 @@ const DonationDetailScreen = () => {
     }
   };
 
-  // ─── Spec helpers ───────────────────────────────────────────────────
-  // Build a flat key→value object from whatever the listing exposes.
+  // â”€â”€â”€ Spec helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Build a flat keyâ†’value object from whatever the listing exposes.
   const getSpecs = (l) => {
     const specs = l.specifications || {};
     const map = {
@@ -175,7 +176,7 @@ const DonationDetailScreen = () => {
     return [];
   };
 
-  // ─── Render ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
     return (
       <View style={styles.backdrop}>
@@ -246,7 +247,7 @@ const DonationDetailScreen = () => {
               </View>
             )}
 
-            {/* Rating badge — only if present */}
+            {/* Rating badge â€” only if present */}
             {listing.rating ? (
               <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={12} color="#F59E0B" />
@@ -320,11 +321,11 @@ const DonationDetailScreen = () => {
               <>
                 {listing.originalPrice > listing.askingPrice ? (
                   <Text style={styles.priceStrike}>
-                    ₹{listing.originalPrice?.toLocaleString()}
+                    â‚¹{listing.originalPrice?.toLocaleString()}
                   </Text>
                 ) : null}
                 <Text style={styles.priceMain}>
-                  ₹{listing.askingPrice?.toLocaleString()}/-
+                  â‚¹{listing.askingPrice?.toLocaleString()}/-
                 </Text>
               </>
             )}
@@ -335,7 +336,7 @@ const DonationDetailScreen = () => {
             </Text>
           ) : null}
 
-          {/* Feature pills (simple variant — Figma 1 places them above price area) */}
+          {/* Feature pills (simple variant â€” Figma 1 places them above price area) */}
           {!useDetailedList && features.length > 0 && (
             <View style={[styles.pillRow, { marginTop: 8 }]}>
               {features.map((f) => (
@@ -374,7 +375,7 @@ const DonationDetailScreen = () => {
             </View>
           </View>
 
-          {/* Specs — detailed list OR two boxes */}
+          {/* Specs â€” detailed list OR two boxes */}
           {useDetailedList ? (
             <View style={styles.detailsBlock}>
               <Text style={styles.sectionTitle}>Product Details</Text>
@@ -438,7 +439,7 @@ const DonationDetailScreen = () => {
               </Text>
               {listing.vendorPrice > 0 ? (
                 <Text style={styles.vendorPrice}>
-                  ₹{listing.vendorPrice.toLocaleString()}
+                  â‚¹{listing.vendorPrice.toLocaleString()}
                 </Text>
               ) : null}
               <Ionicons name="open-outline" size={14} color="rgba(255,255,255,0.85)" />

@@ -463,7 +463,9 @@ const StoryViewModal = ({
     Animated.timing(progress, {
       toValue: 1,
       duration: STORY_DURATION,
-      useNativeDriver: false,
+      // Native driver: we animate scaleX (a transform), not width, so this runs
+      // on the UI thread and won't stutter while the story image decodes.
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) handleNext();
     });
@@ -503,15 +505,15 @@ const StoryViewModal = ({
                   styles.storyProgressBar,
                   {
                     backgroundColor: "#fff",
-                    width:
-                      i < currentIndex
-                        ? "100%"
-                        : i === currentIndex
-                        ? progress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: ["0%", "100%"],
-                          })
-                        : "0%",
+                    // Grow from the left via scaleX (native-driver friendly)
+                    // instead of animating width (layout → JS thread).
+                    transformOrigin: "left",
+                    transform: [
+                      {
+                        scaleX:
+                          i < currentIndex ? 1 : i === currentIndex ? progress : 0,
+                      },
+                    ],
                   },
                 ]}
               />
@@ -940,7 +942,9 @@ const Social = ({ navigation }) => {
   );
 
   // ── Post actions ─────────────────────────────────────────────────────
-  const handleLike = async (id) => {
+  // useCallback-stable so the React.memo on PostItem actually short-circuits —
+  // otherwise every visible post re-renders on any parent state change.
+  const handleLike = useCallback(async (id) => {
     setPosts((current) =>
       current.map((p) =>
         p._id === id
@@ -959,14 +963,18 @@ const Social = ({ navigation }) => {
     } catch (e) {
       console.error("Like failed", e);
     }
-  };
+  }, [token]);
 
-  const handleDoubleTap = (id) => {
-    const post = posts.find((p) => p._id === id);
-    if (post && !post.isLiked) handleLike(id);
-  };
+  const handleDoubleTap = useCallback((id) => {
+    // Read latest posts via functional setState so this stays stable (no `posts` dep).
+    setPosts((current) => {
+      const post = current.find((p) => p._id === id);
+      if (post && !post.isLiked) handleLike(id);
+      return current;
+    });
+  }, [handleLike]);
 
-  const handleSave = async (id) => {
+  const handleSave = useCallback(async (id) => {
     setPosts((current) =>
       current.map((p) => (p._id === id ? { ...p, isSaved: !p.isSaved } : p))
     );
@@ -977,28 +985,50 @@ const Social = ({ navigation }) => {
     } catch (e) {
       console.error("Save failed", e);
     }
-  };
+  }, [token]);
 
-  const handleShare = async (post) => {
+  const handleShare = useCallback(async (post) => {
     try {
       const message = `${post.tournamentName}\n\n${post.caption}\n\nShared via Chalo Khelne`;
       await Share.share({ message });
     } catch (e) {
       console.error(e);
     }
-  };
+  }, []);
 
-  const handleImageClick = (post) => {
+  const handleImageClick = useCallback((post) => {
     const url = post.link || post.linkPreview?.url;
     if (url) Linking.openURL(url).catch((e) => console.error(e));
-  };
+  }, []);
 
-  const handleComment = (post) => {
+  const handleComment = useCallback((post) => {
     setSelectedPost(post);
     setCommentModalVisible(true);
-  };
+  }, []);
 
-  const handleMoreOptions = (post) => {
+  // Defined before handleMoreOptions so it can be a stable useCallback dep.
+  const deletePost = useCallback(async (postId) => {
+    try {
+      const res = await axios.delete(POSTS.ENDPOINTS.DELETE(postId), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data.success) {
+        setPosts((current) => current.filter((p) => p._id !== postId));
+      }
+    } catch (e) {
+      console.error("Delete failed", e);
+      Alert.alert("Error", "Could not delete post");
+    }
+  }, [token]);
+
+  const confirmDeletePost = useCallback((postId) => {
+    Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deletePost(postId) },
+    ]);
+  }, [deletePost]);
+
+  const handleMoreOptions = useCallback((post) => {
     const postOwnerId = post.user?._id?.toString();
     const currentId = currentUserId?.toString();
     const isOwner = postOwnerId && currentId && postOwnerId === currentId;
@@ -1025,28 +1055,35 @@ const Social = ({ navigation }) => {
     Alert.alert("Options", "What would you like to do?", options, {
       cancelable: true,
     });
-  };
+  }, [currentUserId, confirmDeletePost]);
 
-  const confirmDeletePost = (postId) => {
-    Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deletePost(postId) },
-    ]);
-  };
-
-  const deletePost = async (postId) => {
-    try {
-      const res = await axios.delete(POSTS.ENDPOINTS.DELETE(postId), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.data.success) {
-        setPosts((current) => current.filter((p) => p._id !== postId));
-      }
-    } catch (e) {
-      console.error("Delete failed", e);
-      Alert.alert("Error", "Could not delete post");
-    }
-  };
+  // Stable renderItem so PostItem's React.memo can short-circuit. All handlers
+  // below are useCallback-stable, so this only changes when currentUserId does.
+  const renderPost = useCallback(
+    ({ item }) => (
+      <PostItem
+        item={item}
+        currentUserId={currentUserId}
+        onLike={handleLike}
+        onDoubleTap={handleDoubleTap}
+        onComment={handleComment}
+        onSave={handleSave}
+        onShare={handleShare}
+        onMoreOptions={handleMoreOptions}
+        onImageClick={handleImageClick}
+      />
+    ),
+    [
+      currentUserId,
+      handleLike,
+      handleDoubleTap,
+      handleComment,
+      handleSave,
+      handleShare,
+      handleMoreOptions,
+      handleImageClick,
+    ]
+  );
 
   const handleAddComment = async (postId, text) => {
     try {
@@ -1435,19 +1472,11 @@ const Social = ({ navigation }) => {
               </ScrollView>
             </View>
           )}
-          renderItem={({ item }) => (
-            <PostItem
-              item={item}
-              currentUserId={currentUserId}
-              onLike={handleLike}
-              onDoubleTap={handleDoubleTap}
-              onComment={handleComment}
-              onSave={handleSave}
-              onShare={handleShare}
-              onMoreOptions={handleMoreOptions}
-              onImageClick={handleImageClick}
-            />
-          )}
+          renderItem={renderPost}
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

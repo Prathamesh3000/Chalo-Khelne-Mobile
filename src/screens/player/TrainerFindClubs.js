@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -43,7 +44,7 @@ const TrainerFindClubs = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const params = new URLSearchParams({ userId });
       if (sport !== "All") params.append("sport", sport);
       if (hiring) params.append("hiring", "true");
@@ -66,7 +67,7 @@ const TrainerFindClubs = () => {
     if (applying) return;
     try {
       setApplying(club.id);
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(
         TRAINER.APPLY_CLUB,
         { userId, clubId: club.id },

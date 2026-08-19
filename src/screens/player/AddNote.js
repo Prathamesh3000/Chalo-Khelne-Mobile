@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useRef } from "react";
 import {
   StyleSheet,
@@ -71,7 +72,7 @@ const AddNote = ({ navigation, route }) => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(async () => {
       try {
-        const token = await AsyncStorage.getItem("auth_token");
+        const token = await getToken();
         const response = await authFetch(
           `${Website_SERVER_URL.Wbsite_SERVER_URL}/api/search?q=${encodeURIComponent(
             text
@@ -109,7 +110,7 @@ const AddNote = ({ navigation, route }) => {
 
     setSaving(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const payload = {
         userId,
         title,

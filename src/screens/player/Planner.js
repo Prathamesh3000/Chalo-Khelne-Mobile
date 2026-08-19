@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRoute, useFocusEffect } from "@react-navigation/native";
 import {
@@ -61,7 +62,7 @@ const Planner = ({ navigation }) => {
       }
       if (showSpinner) setLoading(true);
       try {
-        const token = await AsyncStorage.getItem("auth_token");
+        const token = await getToken();
         const res = await authFetch(feedUrl, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -108,7 +109,7 @@ const Planner = ({ navigation }) => {
     }
   }, [route.params?.newNote]);
 
-  // ── Derived stats for the summary card ───────────────────────────────────
+  // â”€â”€ Derived stats for the summary card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const isPending = (item) => {
     const tag = (item.tag || "").toString().toLowerCase();
     return tag.includes("pending");

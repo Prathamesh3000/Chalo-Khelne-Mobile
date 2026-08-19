@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Centralized auth-token storage (Phase 3, item 3b).
  *
  * Source of truth = expo-secure-store (Keychain / Keystore), NOT plaintext
@@ -12,7 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 let SecureStore = null;
 try {
-  // Optional native module — degrade gracefully if absent.
+  // Optional native module â€” degrade gracefully if absent.
   SecureStore = require("expo-secure-store");
 } catch (_e) {
   SecureStore = null;
@@ -65,7 +65,7 @@ export async function clearToken() {
   } catch {}
 }
 
-// ── Refresh token (Phase 8.1) — stored in SecureStore alongside the access token ──
+// â”€â”€ Refresh token (Phase 8.1) â€” stored in SecureStore alongside the access token â”€â”€
 export async function getRefreshToken() {
   if (await secureAvailable()) return (await SecureStore.getItemAsync(REFRESH_KEY)) || null;
   return AsyncStorage.getItem(REFRESH_KEY);
@@ -90,18 +90,18 @@ export async function clearRefreshToken() {
   } catch {}
 }
 
-// ── Multi-session account registry (account switcher) ───────────────────────
+// â”€â”€ Multi-session account registry (account switcher) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Lets the app remember more than one signed-in account (e.g. a player account
 // AND a school-coach account) and flip between them WITHOUT logging out. The
 // ACTIVE session is still mirrored to the canonical auth_token/refresh_token/
-// auth_user keys above, so every existing screen keeps working unchanged — this
+// auth_user keys above, so every existing screen keeps working unchanged â€” this
 // only adds the ability to save several and swap which one is "active".
 //
 // Layout:
-//   auth_sessions        (AsyncStorage) → [{ id, user }]  (non-secret metadata)
-//   active_session_id    (AsyncStorage) → id of the active account
-//   auth_token__<id>     (SecureStore)  → that account's access token
-//   refresh_token__<id>  (SecureStore)  → that account's refresh token
+//   auth_sessions        (AsyncStorage) â†’ [{ id, user }]  (non-secret metadata)
+//   active_session_id    (AsyncStorage) â†’ id of the active account
+//   auth_token__<id>     (SecureStore)  â†’ that account's access token
+//   refresh_token__<id>  (SecureStore)  â†’ that account's refresh token
 const SESSIONS_KEY = "auth_sessions";
 const ACTIVE_SESSION_KEY = "active_session_id";
 const tkKey = (id) => `auth_token__${id}`;
@@ -152,7 +152,7 @@ export async function setActiveSessionId(id) {
   else await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
 }
 
-// Add or update a saved account (tokens → SecureStore, metadata → AsyncStorage).
+// Add or update a saved account (tokens â†’ SecureStore, metadata â†’ AsyncStorage).
 export async function upsertSession({ id, token, refreshToken, user }) {
   id = String(id);
   if (token) await secureSet(tkKey(id), token);

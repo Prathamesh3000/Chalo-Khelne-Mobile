@@ -69,6 +69,15 @@ const ENDPOINTS = {
       `${BASE_URL}/players/bookings/tournament-teams/${tournamentId}`,
   },
 
+  // Tournament-day attendance / check-in.
+  // Solves "53 registered, 22 turned up" — the draw is built from who is
+  // present. A player may only ever check THEMSELVES in (server-enforced).
+  ATTENDANCE: {
+    ME: (tournamentId: string) => `${BASE_URL}/tournaments/${tournamentId}/attendance/me`,
+    SELF_CHECK_IN: (tournamentId: string) => `${BASE_URL}/tournaments/${tournamentId}/attendance/self`,
+    SUMMARY: (tournamentId: string) => `${BASE_URL}/tournaments/${tournamentId}/attendance/summary`,
+  },
+
   // Tournament leaderboard
   LEADERBOARD: {
     ALL_TOURNAMENTS: `${BASE_URL}/tournaments/leaderboard/all`,

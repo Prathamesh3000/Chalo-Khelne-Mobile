@@ -1,3 +1,4 @@
+﻿import { getToken } from "../services/tokenStore";
 import React, { createContext, useState, useEffect, useContext, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AUTH from "../api/auth";
@@ -64,7 +65,7 @@ export interface AuthContextValue {
 
 const USER_KEY = "auth_user";
 
-// Create the context with default values (fallback only — the app is always
+// Create the context with default values (fallback only â€” the app is always
 // wrapped in AuthProvider).
 const AuthContext = createContext<AuthContextValue>({
   user: null,
@@ -98,7 +99,7 @@ export const useAuth = (): AuthContextValue => {
 
 // Helper functions for storage operations
 const Storage = {
-  // Token operations — backed by SecureStore via tokenStore (Phase 3b)
+  // Token operations â€” backed by SecureStore via tokenStore (Phase 3b)
   async storeToken(token: string) {
     try {
       await tokenStore.setToken(token);
@@ -153,7 +154,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  // Account switcher — the list of remembered accounts + which one is active.
+  // Account switcher â€” the list of remembered accounts + which one is active.
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
 
@@ -199,7 +200,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         if (storedToken && storedUser) {
           // If the (1h) access token is expired, try to refresh it before
-          // giving up — only log out if there's no valid refresh token.
+          // giving up â€” only log out if there's no valid refresh token.
           try {
             const parts = storedToken.split(".");
             if (parts.length === 3) {
@@ -232,7 +233,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             } as RequestInit & { timeout?: number });
 
             if (response.status === 401) {
-              // Token rejected by server — clear and logout
+              // Token rejected by server â€” clear and logout
               console.log("[AUTH] Token rejected by server (401), logging out...");
               await Storage.clear();
               setUser(null);
@@ -353,7 +354,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const updateUser = async (updatedUser: AuthUser, newToken: string | null = null) => {
+  const updateUser = useCallback(async (updatedUser: AuthUser, newToken: string | null = null) => {
     if (!updatedUser) return;
 
     try {
@@ -367,10 +368,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (err) {
       console.error("Error updating user in context:", err);
     }
-  };
+  }, []);
 
   // Register a new user
-  const register = async (userData: any) => {
+  const register = useCallback(async (userData: any) => {
     setLoading(true);
     setError(null);
     try {
@@ -397,10 +398,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Log in an existing user
-  const login = async (credentials: any) => {
+  const login = useCallback(async (credentials: any) => {
     setLoading(true);
     setError(null);
     try {
@@ -444,9 +445,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [rememberSession]);
 
-  const googleLogin = async (data: any) => {
+  const googleLogin = useCallback(async (data: any) => {
     setLoading(true);
     setError(null);
 
@@ -470,7 +471,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Remember this account in the switcher.
       await rememberSession({ token: responseData.token, refreshToken: responseData.refreshToken, user: responseData.user });
 
-      // Optional – never block login
+      // Optional â€“ never block login
       try {
         await NotificationService.registerPushTokenForNewUser(
           responseData.user._id
@@ -491,10 +492,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [rememberSession]);
 
   // Make a remembered account the active one by mirroring its saved token/user
-  // into the canonical keys the whole app reads. No network, no re-login — the
+  // into the canonical keys the whole app reads. No network, no re-login â€” the
   // navigator re-renders for the new account's role automatically.
   const applyActiveSession = useCallback(
     async (session: AuthSession) => {
@@ -537,7 +538,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Add ANOTHER account (e.g. the school-coach login) WITHOUT logging out of the
   // current one, then switch into it. On failure the current session is left
-  // completely untouched — unlike login(), which clears state on error.
+  // completely untouched â€” unlike login(), which clears state on error.
   const addAccount = useCallback(
     async (credentials: any) => {
       setLoading(true);
@@ -564,7 +565,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     [applyActiveSession]
   );
 
-  // Log out — forget ONLY the active account. If another remembered account
+  // Log out â€” forget ONLY the active account. If another remembered account
   // remains, switch to it instead of dropping the user to the login screen.
   const logout = useCallback(async () => {
     setLoading(true);
@@ -580,7 +581,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           });
         }
       } catch (revokeErr) {
-        // Ignore — the local clear below still logs the user out.
+        // Ignore â€” the local clear below still logs the user out.
       }
 
       // Drop the current account from the remembered list.
@@ -599,7 +600,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
 
-      // No other account — full clear (original behaviour).
+      // No other account â€” full clear (original behaviour).
       await Storage.clear();
       await tokenStore.setActiveSessionId(null);
       setUser(null);
@@ -626,7 +627,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [token]);
 
   // Update profile (works for all user types)
-  const updateProfile = async (userId: string, profileData: any, profileType = "user") => {
+  const updateProfile = useCallback(async (userId: string, profileData: any, profileType = "user") => {
     setLoading(true);
     setError(null);
     try {
@@ -660,10 +661,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  // Forgot password — send OTP (does NOT use global loading to avoid blocking reset form)
-  const forgotPassword = async (email: string) => {
+  // Forgot password â€” send OTP (does NOT use global loading to avoid blocking reset form)
+  const forgotPassword = useCallback(async (email: string) => {
     setError(null);
     try {
       const response = await apiRequest(`${AUTH.BASE_URL}/email/forgot-password/send-otp`, "POST", {
@@ -674,10 +675,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setError(err.message || "Password reset request failed");
       throw err;
     }
-  };
+  }, []);
 
-  // Reset password with OTP — verify then reset in sequence
-  const resetPassword = async (data: { email: string; otp: string; newPassword: string }) => {
+  // Reset password with OTP â€” verify then reset in sequence
+  const resetPassword = useCallback(async (data: { email: string; otp: string; newPassword: string }) => {
     setError(null);
     try {
       // 1. Verify OTP first
@@ -694,38 +695,67 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setError(err.message || "Password reset failed");
       throw err;
     }
-  };
+  }, []);
 
   // Role-specific helper methods
   const isPlayer = !!(user && user.role === "Player");
   const isTrainer = !!(user && user.role === "Trainer");
   const isReferee = !!(user && user.role === "Referee");
 
-  const value: AuthContextValue = {
-    user,
-    token,
-    loading,
-    isInitializing,
-    error,
-    register,
-    login,
-    logout,
-    updateProfile,
-    updateUser,
-    forgotPassword,
-    resetPassword,
-    googleLogin,
-    isAuthenticated: !!user,
-    isPlayer,
-    isTrainer,
-    isReferee,
-    // Account switcher
-    sessions,
-    activeSessionId,
-    addAccount,
-    switchAccount,
-    refreshSessions,
-  };
+  // Memoize the context value so consumers (nearly every screen via useAuth)
+  // only re-render when a real field changes â€” not on every provider render.
+  // All functions below are useCallback-stable, so this recomputes only when a
+  // state value actually changes.
+  const value: AuthContextValue = React.useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      isInitializing,
+      error,
+      register,
+      login,
+      logout,
+      updateProfile,
+      updateUser,
+      forgotPassword,
+      resetPassword,
+      googleLogin,
+      isAuthenticated: !!user,
+      isPlayer,
+      isTrainer,
+      isReferee,
+      // Account switcher
+      sessions,
+      activeSessionId,
+      addAccount,
+      switchAccount,
+      refreshSessions,
+    }),
+    [
+      user,
+      token,
+      loading,
+      isInitializing,
+      error,
+      isPlayer,
+      isTrainer,
+      isReferee,
+      sessions,
+      activeSessionId,
+      register,
+      login,
+      logout,
+      updateProfile,
+      updateUser,
+      forgotPassword,
+      resetPassword,
+      googleLogin,
+      addAccount,
+      switchAccount,
+      refreshSessions,
+    ]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

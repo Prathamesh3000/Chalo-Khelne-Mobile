@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -61,7 +62,7 @@ const MyListingsScreen = () => {
 
   const fetchListings = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(DONATIONS.ENDPOINTS.MY_LISTINGS, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -94,7 +95,7 @@ const MyListingsScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem("auth_token");
+              const token = await getToken();
               await axios.delete(DONATIONS.ENDPOINTS.WITHDRAW(id), {
                 headers: { Authorization: `Bearer ${token}` },
               });
@@ -114,7 +115,7 @@ const MyListingsScreen = () => {
   const handleEdit = (item) =>
     navigation.navigate("SellAddProduct", { editingListing: item });
 
-  // ─── Derived stats for Sold tab ────────────────────────────────────
+  // â”€â”€â”€ Derived stats for Sold tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // "Total Product" is scoped to sold items so it always matches the visible list.
   // "Pending" still shows the cross-tab pending-approval count so the seller has
   // a quick sense of items not yet live.
@@ -135,7 +136,7 @@ const MyListingsScreen = () => {
     [listings, activeTab]
   );
 
-  // ─── Card renderers ────────────────────────────────────────────────
+  // â”€â”€â”€ Card renderers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const ActiveCard = ({ item }) => {
     const imageUrl = resolveImage(item);
     const pills = [];
@@ -182,11 +183,11 @@ const MyListingsScreen = () => {
 
           <View style={styles.activePriceRow}>
             <Text style={styles.priceMain}>
-              {item.isDonation ? "Free" : `₹${item.askingPrice?.toLocaleString()}/-`}
+              {item.isDonation ? "Free" : `â‚¹${item.askingPrice?.toLocaleString()}/-`}
             </Text>
             {item.originalPrice > item.askingPrice ? (
               <Text style={styles.priceStrike}>
-                ₹{item.originalPrice?.toLocaleString()}/-
+                â‚¹{item.originalPrice?.toLocaleString()}/-
               </Text>
             ) : null}
           </View>
@@ -277,7 +278,7 @@ const MyListingsScreen = () => {
             <Text style={styles.soldPillText}>Sold Already</Text>
           </View>
           <Text style={styles.soldPrice}>
-            {item.isDonation ? "Free" : `₹${item.askingPrice?.toLocaleString()}`}
+            {item.isDonation ? "Free" : `â‚¹${item.askingPrice?.toLocaleString()}`}
           </Text>
         </View>
       </TouchableOpacity>
@@ -290,7 +291,7 @@ const MyListingsScreen = () => {
     return <SoldCard item={item} />;
   };
 
-  // ─── Render ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Header */}
@@ -339,7 +340,7 @@ const MyListingsScreen = () => {
           </View>
           <View style={styles.statCol}>
             <Text style={[styles.statNum, { color: GREEN }]}>
-              ₹{stats.totalIncome.toLocaleString()}
+              â‚¹{stats.totalIncome.toLocaleString()}
             </Text>
             <Text style={styles.statLabel}>Total Income</Text>
           </View>

@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState } from "react";
 import {
   View,
@@ -73,9 +74,9 @@ const EquipmentPaymentMethod = () => {
   const [selectedMethodId, setSelectedMethodId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // ─── Sequential claim per cart item ────────────────────────────────
+  // â”€â”€â”€ Sequential claim per cart item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const claimAllItems = async (apiPaymentMethod) => {
-    const token = await AsyncStorage.getItem("auth_token");
+    const token = await getToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const contact = userPhone || user?.phone || user?.mobile || "";
 
@@ -125,7 +126,7 @@ const EquipmentPaymentMethod = () => {
 
     setSubmitting(true);
     try {
-      // Backend expects upi/qr/offline; map online providers → "upi", cod → "offline"
+      // Backend expects upi/qr/offline; map online providers â†’ "upi", cod â†’ "offline"
       const apiPaymentMethod = method.online ? method.id : "offline";
 
       const { successes, failures } = await claimAllItems(apiPaymentMethod);
@@ -215,7 +216,7 @@ const EquipmentPaymentMethod = () => {
       <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
         <View style={s.totalRow}>
           <Text style={s.totalLabel}>Total</Text>
-          <Text style={s.totalValue}>₹{amount}/-</Text>
+          <Text style={s.totalValue}>â‚¹{amount}/-</Text>
         </View>
         <TouchableOpacity
           style={[

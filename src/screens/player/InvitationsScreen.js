@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -99,7 +100,7 @@ const formatTime = (start, end) => {
   const s = fmt12(start);
   if (!end) return s;
   const e = fmt12(end);
-  return `${s} – ${e}`;
+  return `${s} â€“ ${e}`;
 };
 
 const getProfileImage = (userData) => {
@@ -135,7 +136,7 @@ export default function InvitationsScreen() {
     setLoading(true);
     setLoadError(false);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const url =
         tab === "received"
           ? INVITATIONS.RECEIVED(user._id || user.id)
@@ -192,7 +193,7 @@ export default function InvitationsScreen() {
   const handleRespond = async (invitationId, status) => {
     setResponding(invitationId);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(
         INVITATIONS.RESPOND,
         { invitation_id: invitationId, status },

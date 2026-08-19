@@ -18,6 +18,8 @@ import FlashMessage from "react-native-flash-message";
 import Toast from 'react-native-toast-message';
 import NotificationService from "./src/services/NotificationService";
 import { initSentry, Sentry } from "./src/services/sentry";
+import { loadScoringConfig } from "./src/utils/scoringConfig";
+import ErrorBoundary from "./src/components/ErrorBoundary";
 
 // Initialize crash reporting as early as possible (no-op until a DSN is set).
 initSentry();
@@ -62,6 +64,12 @@ function App() {
     // Register navigation ref for notifications
     NotificationService.setNavigationRef(navigationRef);
 
+    // §6.1 — pull the authoritative sport→scoringType map and its labels from
+    // the server. Fire-and-forget: scoringConfig ships a seed copy so the first
+    // render (and an offline launch) is still correct, and this replaces it as
+    // soon as the response lands.
+    loadScoringConfig();
+
     const handleBackButton = () => {
       // 1. If a stack has history, pop it
       if (navigationRef.current?.canGoBack()) {
@@ -104,6 +112,11 @@ function App() {
   return (
     <SafeAreaProvider>
       <FlashMessage position="top" />
+      {/* §5.2 — root error boundary. Without one, an uncaught render error in
+          a production RN build is a blank screen with no way out but
+          force-quitting. Nested boundaries below keep a single bad screen from
+          taking the whole app down. */}
+      <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <NotificationProvider>
@@ -121,6 +134,7 @@ function App() {
           </NotificationProvider>
         </AuthProvider>
       </QueryClientProvider>
+      </ErrorBoundary>
       <Toast />
     </SafeAreaProvider>
   );

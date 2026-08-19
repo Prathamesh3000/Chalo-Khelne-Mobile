@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -50,7 +51,7 @@ const resolveAvatar = (user) => {
 };
 
 const formatDOB = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "â€”";
   try {
     return new Date(iso).toLocaleDateString("en-IN", {
       day: "numeric",
@@ -58,7 +59,7 @@ const formatDOB = (iso) => {
       year: "numeric",
     });
   } catch {
-    return "—";
+    return "â€”";
   }
 };
 
@@ -77,7 +78,7 @@ const PlayerProfileScreen = () => {
 
   const fetchProfile = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       if (!token) return;
       const res = await authFetch(AUTH.ENDPOINTS.CURRENT_USER, {
         headers: { Authorization: `Bearer ${token}` },
@@ -178,7 +179,7 @@ const PlayerProfileScreen = () => {
     .map((a) => a.trim())
     .filter(Boolean);
 
-  // Real performance — derived from /api/player-stats/:userId aggregation
+  // Real performance â€” derived from /api/player-stats/:userId aggregation
   const sportStats = careerStats?.sportStats || [];
   const sportNames = sportStats.map((s) => s.sport);
   const activeStat =
@@ -285,7 +286,7 @@ const PlayerProfileScreen = () => {
           >
             <Ionicons name="add" size={18} color={GREEN} />
           </TouchableOpacity>
-          {/* Roles this account can act as (always includes base Player) —
+          {/* Roles this account can act as (always includes base Player) â€”
               every chip is a real switch. New roles are added via the "+". */}
           {getAvailableRoles(profile)
             .map((r) => {
@@ -435,7 +436,7 @@ const PlayerProfileScreen = () => {
             value={
               profile.clubName ||
               (Array.isArray(profile.clubNames) && profile.clubNames[0]) ||
-              "—"
+              "â€”"
             }
           />
 
@@ -471,7 +472,7 @@ const PlayerProfileScreen = () => {
           )}
         </View>
 
-        {/* Switch account (player ⇄ school coach) */}
+        {/* Switch account (player â‡„ school coach) */}
         <TouchableOpacity
           style={styles.switchBtn}
           onPress={() => setSwitcherOpen(true)}
@@ -501,7 +502,7 @@ const DetailRow = ({ label, value }) => (
   <View style={styles.detailRow}>
     <Text style={styles.detailLabel}>{label}</Text>
     <Text style={styles.detailValue} numberOfLines={2}>
-      {value || "—"}
+      {value || "â€”"}
     </Text>
   </View>
 );

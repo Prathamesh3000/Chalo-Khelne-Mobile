@@ -14,6 +14,14 @@
  * return shapes below are what call sites actually consume.
  */
 
+import {
+  getScoringType,
+  getLabelsFor,
+  KNOWN_SCORING_TYPES,
+} from "./scoringConfig";
+
+export { getScoringType };
+
 export interface ResultLabels {
   round: string;
   subRound: string | null;
@@ -22,8 +30,12 @@ export interface ResultLabels {
 }
 
 export interface MatchWinner {
-  playerId?: string;
-  playerName?: string;
+  // Nullable on purpose: the legacy semifinal schema stores the winner as a
+  // plain team-name String with no id at all, and TeamKnockoutMatch stores a
+  // TEAM id rather than a player id (§6.2).
+  playerId?: string | null;
+  playerName?: string | null;
+  isTeam?: boolean;
   [key: string]: any;
 }
 
@@ -44,40 +56,59 @@ interface MatchResultOpts {
   sportName?: string | null;
 }
 
-const SPORT_SCORING_TYPES: Record<string, string> = {
-  "Table Tennis": "sets",
-  "Badminton": "sets",
-  "Tennis": "sets",
-  "Pickleball": "sets",
-  "Volleyball": "sets",
-  "Squash": "sets",
-  "Cricket": "innings",
-  "Football": "time",
-  "Basketball": "time",
-  "Hockey": "time",
-  "Kabaddi": "time",
-  "Chess": "single",
-  "Carrom": "board",
-  "Snooker": "single",
-  "Turf Games": "single",
-  "Cricket Nets": "single",
-};
+// §6.1 — the sport→scoringType map and the label table used to be hardcoded
+// HERE, and again in the web app, and again on the server; the three had
+// drifted (Carrom rendered as "single" on web and "board" here; Foosball was
+// unknown to both clients). They now come from the server via
+// utils/scoringConfig.ts. Re-inlining either table is how §6.1 comes back.
 
-export function getScoringType(sportName?: string | null): string | null {
-  if (!sportName) return null;
-  const key = Object.keys(SPORT_SCORING_TYPES).find(
-    (k) => k.toLowerCase() === sportName.toLowerCase()
-  );
-  return (key && SPORT_SCORING_TYPES[key]) || null;
+/**
+ * Normalize the winner from any match schema — mirrors the server's
+ * utils/matchUtils.js#getWinner, which handles five different shapes:
+ *
+ *   Match, DirectKnockoutMatch → result.winner.playerId
+ *   SuperMatch, KnockoutMatch  → winner.playerId
+ *   TeamKnockoutMatch          → winnerId (bare ObjectId, no name)
+ *   legacy semifinal           → winner as a plain team-name String
+ *
+ * Returns null when the match genuinely has no winner yet.
+ */
+export function resolveWinner(match: any): MatchWinner | null {
+  if (!match) return null;
+
+  if (match.result?.winner?.playerId) {
+    return {
+      playerId: match.result.winner.playerId,
+      playerName: match.result.winner.playerName || null,
+    };
+  }
+  if (match.result?.winner && typeof match.result.winner === "object") {
+    return match.result.winner;
+  }
+
+  if (match.winner?.playerId) {
+    return {
+      playerId: match.winner.playerId,
+      playerName: match.winner.playerName || null,
+    };
+  }
+
+  // TeamKnockoutMatch — a bare ObjectId ref to the winning TEAM.
+  if (match.winnerId) {
+    return {
+      playerId: match.winnerId,
+      playerName: match.winnerTeamName || match.winnerName || null,
+      isTeam: true,
+    };
+  }
+
+  // Legacy semifinal schema — winner is the team name itself.
+  if (typeof match.winner === "string" && match.winner) {
+    return { playerId: null, playerName: match.winner, isTeam: true };
+  }
+
+  return null;
 }
-
-const LABELS: Record<string, ResultLabels> = {
-  sets:    { round: "Set", subRound: "Game", score: "Points", result: "Sets" },
-  time:    { round: "Period", subRound: null, score: "Goals", result: "Score" },
-  innings: { round: "Innings", subRound: "Over", score: "Runs", result: "Score" },
-  board:   { round: "Board", subRound: null, score: "Points", result: "Boards" },
-  single:  { round: "Game", subRound: null, score: "Result", result: "Result" },
-};
 
 /**
  * Read normalized match result from any match object.
@@ -90,7 +121,7 @@ export function readMatchResult(match: any, opts: MatchResultOpts = {}): MatchRe
     const t = match.matchResult.type;
     return {
       ...match.matchResult,
-      labels: LABELS[t] || LABELS.sets,
+      labels: getLabelsFor(t),
       isSetBased: t === "sets",
       // Per-sport detail: cricket innings / carrom boards (from the backend
       // matchResult.details), falling back to the raw result/live blocks.
@@ -125,9 +156,10 @@ export function readMatchResult(match: any, opts: MatchResultOpts = {}): MatchRe
     p2Score = match.setsWon.away || 0;
   }
 
-  let winner: MatchWinner | null = null;
-  if (match.result?.winner) winner = match.result.winner;
-  else if (match.winner) winner = match.winner;
+  // §6.2 — resolve the winner from every shape the server can store. See the
+  // resolveWinner docblock; this used to handle only two of five shapes and
+  // rendered no winner for a completed team knockout.
+  const winner: MatchWinner | null = resolveWinner(match);
 
   // Per-sport detail for rich display (cricket innings / carrom boards / sets).
   let details: any[] = [];
@@ -143,7 +175,7 @@ export function readMatchResult(match: any, opts: MatchResultOpts = {}): MatchRe
     winner,
     details,
     cricketResult: match.result?.cricketResult || null,
-    labels: LABELS[scoringType] || LABELS.sets,
+    labels: getLabelsFor(scoringType),
     isSetBased: scoringType === "sets",
   };
 }
@@ -301,8 +333,11 @@ export function getLiveLabel(match: any, opts: MatchResultOpts = {}): string {
  * Get labels for a sport.
  */
 export function getResultLabels(sportNameOrType?: string | null): ResultLabels {
-  const key = sportNameOrType && LABELS[sportNameOrType]
-    ? sportNameOrType
-    : getScoringType(sportNameOrType) || "sets";
-  return LABELS[key] || LABELS.sets;
+  // Accepts either a scoring type ("board") or a sport name ("Carrom").
+  // An unknown sport falls back to the neutral "single" rendering, never to
+  // "sets" — that fallback is what gave a Foosball match racquet headings.
+  if (sportNameOrType && KNOWN_SCORING_TYPES.includes(sportNameOrType)) {
+    return getLabelsFor(sportNameOrType);
+  }
+  return getLabelsFor(getScoringType(sportNameOrType));
 }

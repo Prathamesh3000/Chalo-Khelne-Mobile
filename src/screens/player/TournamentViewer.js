@@ -14,10 +14,12 @@ import Icon from "react-native-vector-icons/FontAwesome";
 import tournamentConfig from "../../api/tournaments";
 import axios from "axios";
 import { readMatchResult, getLiveLabel, getScoreDisplay } from "../../utils/matchResultUtils";
+import { useLiveMatch } from "../../hooks/useLiveMatch";
 import CricketScoreDetail from "../../components/CricketScoreDetail";
 import useTournamentSports from "../../hooks/useTournamentSports";
 import SportTabStrip from "../../components/SportTabStrip";
 import { withSport } from "../../utils/sportQuery";
+import withErrorBoundary from "../../components/withErrorBoundary";
 
 const TournamentViewer = ({ tournamentId: rawTournamentId }) => {
   // Normalize tournamentId to be a string
@@ -57,6 +59,40 @@ const TournamentViewer = ({ tournamentId: rawTournamentId }) => {
   const [matchesData, setMatchesData] = useState({});
 
   const [selectedMatch, setSelectedMatch] = useState(null);
+
+  // ── Live scores (§5.1) ────────────────────────────────────────────────
+  // The server has always broadcast into `match_<id>`; this app never joined,
+  // and had no polling fallback either — so a spectator saw the score frozen at
+  // whatever it was when the screen opened. Subscribe only while an in-progress
+  // match is actually on screen, so we hold no rooms in the background.
+  const liveMatchId =
+    showMatchDetails && normMatchStatus(selectedMatch?.status) === "IN_PROGRESS"
+      ? selectedMatch?._id || selectedMatch?.matchId
+      : null;
+  const { live: liveUpdate, isConnected: liveConnected, lastUpdateAt } =
+    useLiveMatch(liveMatchId);
+
+  // Merge ONLY the score fields.
+  //
+  // The broadcast payload carries `player1`/`player2` as display STRINGS, while
+  // this screen renders them as objects (player1.userName). A blanket spread
+  // would replace the objects with strings and blank both names out.
+  useEffect(() => {
+    if (!liveUpdate) return;
+    setSelectedMatch((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        liveScore: liveUpdate.liveScore ?? prev.liveScore,
+        sets: liveUpdate.sets ?? prev.sets,
+        currentSet: liveUpdate.roundNumber ?? liveUpdate.currentSet ?? prev.currentSet,
+        currentGame:
+          liveUpdate.subRoundNumber ?? liveUpdate.currentGame ?? prev.currentGame,
+        result: liveUpdate.result ?? prev.result,
+        status: liveUpdate.status ?? prev.status,
+      };
+    });
+  }, [liveUpdate]);
   const [showMatchDetails, setShowMatchDetails] = useState(false);
 
   // Fetch groups - Round 1 league groups
@@ -1072,10 +1108,22 @@ const TournamentViewer = ({ tournamentId: rawTournamentId }) => {
                 {/* 🔥 LIVE SCORE SECTION - The star of the show! */}
                 {(normMatchStatus(selectedMatch.status) === 'IN_PROGRESS' || normMatchStatus(selectedMatch.status) === 'COMPLETED') && (
                   <View style={styles.detailSection}>
-                    <Text style={styles.sectionTitle}>
-                      <Icon name="trophy" size={16} color="#FFD700" />
-                      {normMatchStatus(selectedMatch.status) === 'IN_PROGRESS' ? ' Live Score' : ' Final Score'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={styles.sectionTitle}>
+                        <Icon name="trophy" size={16} color="#FFD700" />
+                        {normMatchStatus(selectedMatch.status) === 'IN_PROGRESS' ? ' Live Score' : ' Final Score'}
+                      </Text>
+                      {/* Tells the spectator this updates by itself. Without it
+                          a frozen score is indistinguishable from a stalled one. */}
+                      {normMatchStatus(selectedMatch.status) === 'IN_PROGRESS' && liveConnected && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#15A765' }} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#15A765' }}>
+                            {lastUpdateAt ? 'LIVE' : 'CONNECTED'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
 
                     {/* Current/Final Set Score */}
                     <View style={styles.scoreBoard}>
@@ -2605,4 +2653,6 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TournamentViewer;
+// §5.2 — own boundary so one malformed record crashes THIS screen
+// rather than the whole app; Back still works and the nav stack survives.
+export default withErrorBoundary(TournamentViewer, "this tournament");

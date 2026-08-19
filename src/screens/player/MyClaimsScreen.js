@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -96,7 +97,7 @@ const dateBoundFor = (key) => {
   }
 };
 
-// Map backend (status + paymentStatus + deliveryStatus) → display key
+// Map backend (status + paymentStatus + deliveryStatus) â†’ display key
 const resolveStatus = (item) => {
   if (item.deliveryStatus) return item.deliveryStatus;
   if (item.paymentStatus === "Rejected") return "cancelled";
@@ -158,7 +159,7 @@ const MyClaimsScreen = () => {
 
   const fetchClaims = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(DONATIONS.ENDPOINTS.MY_CLAIMS, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -180,7 +181,7 @@ const MyClaimsScreen = () => {
     fetchClaims();
   }, []);
 
-  // ─── Build sections grouped by claimedAt date ──────────────────────
+  // â”€â”€â”€ Build sections grouped by claimedAt date â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sections = useMemo(() => {
     const dateBound = dateBoundFor(activeDate);
 
@@ -200,7 +201,7 @@ const MyClaimsScreen = () => {
       buckets.get(dateKey).push(item);
     });
 
-    // Sort: Today first, then dated groups newest → oldest
+    // Sort: Today first, then dated groups newest â†’ oldest
     return Array.from(buckets.entries())
       .sort(([a], [b]) => {
         if (a === "Today") return -1;
@@ -231,7 +232,7 @@ const MyClaimsScreen = () => {
     });
   };
 
-  // ─── Card ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const renderItem = ({ item }) => {
     const key = resolveStatus(item);
     const st = STATUS_STYLES[key] || STATUS_STYLES.confirmed;
@@ -274,7 +275,7 @@ const MyClaimsScreen = () => {
           <Text style={styles.priceText}>
             {item.isDonation
               ? "Free"
-              : `₹${item.askingPrice?.toLocaleString()}`}
+              : `â‚¹${item.askingPrice?.toLocaleString()}`}
           </Text>
         </View>
       </TouchableOpacity>
@@ -285,7 +286,7 @@ const MyClaimsScreen = () => {
     <Text style={styles.sectionHeader}>{title}</Text>
   );
 
-  // ─── Render ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Header */}

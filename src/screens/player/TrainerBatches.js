@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -42,7 +43,7 @@ const TrainerBatches = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(TRAINER.BATCHES(userId), { headers: { Authorization: `Bearer ${token}` } });
       if (res.data?.success) setBatches(res.data.batches || []);
     } catch (e) {
@@ -105,7 +106,7 @@ const TrainerBatches = () => {
                 <View style={styles.metaRow}>
                   <Ionicons name="time-outline" size={14} color="#888" />
                   <Text style={styles.metaText}>
-                    {b.scheduleDays?.join(", ")}{b.time ? ` • ${b.time}` : ""}
+                    {b.scheduleDays?.join(", ")}{b.time ? ` â€¢ ${b.time}` : ""}
                   </Text>
                 </View>
                 <View style={styles.metaRow}>

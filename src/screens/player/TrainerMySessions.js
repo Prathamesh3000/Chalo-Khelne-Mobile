@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -53,7 +54,7 @@ const TrainerMySessions = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(`${TRAINER.SESSIONS(userId)}?status=${tab}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

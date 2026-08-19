@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
@@ -16,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import PLANNER from "../../api/planner";
 import { authFetch } from "../../api/authFetch";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const formatDateTitle = (isoDate) => {
   if (!isoDate) return "";
@@ -40,7 +41,7 @@ const formatParticipants = (list) => {
 };
 
 // Parse a free-form time string into [startMinutes, endMinutes] from midnight.
-// Handles: "3:30 PM", "3:30 – 5:00 PM", "06:00 – 07:30 AM", "All Day".
+// Handles: "3:30 PM", "3:30 â€“ 5:00 PM", "06:00 â€“ 07:30 AM", "All Day".
 // Returns null when nothing usable is found.
 const parseTimeRange = (timeStr) => {
   if (!timeStr || typeof timeStr !== "string") return null;
@@ -97,7 +98,7 @@ const findFirstConflict = (activities) => {
   return null;
 };
 
-// ─── Screen ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const DaySchedule = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -149,7 +150,7 @@ const DaySchedule = ({ navigation }) => {
           style: "destructive",
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem("auth_token");
+              const token = await getToken();
               const res = await authFetch(PLANNER.ENDPOINTS.DELETE(activity.id), {
                 method: "DELETE",
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -350,7 +351,7 @@ const DaySchedule = ({ navigation }) => {
         )}
       </ScrollView>
 
-      {/* Footer — Add Another Activity */}
+      {/* Footer â€” Add Another Activity */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
         <TouchableOpacity
           style={styles.addButton}
@@ -558,7 +559,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Footer — Add Another Activity
+  // Footer â€” Add Another Activity
   footer: {
     paddingHorizontal: 16,
     paddingTop: 8,

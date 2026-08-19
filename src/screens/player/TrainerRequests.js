@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -40,7 +41,7 @@ const TrainerRequests = () => {
   const [counts, setCounts] = useState({ player: 0, club: 0, event: 0 });
   const [requests, setRequests] = useState([]);
 
-  const authHeaders = async () => ({ Authorization: `Bearer ${await AsyncStorage.getItem("auth_token")}` });
+  const authHeaders = async () => ({ Authorization: `Bearer ${await getToken()}` });
 
   const load = useCallback(async () => {
     if (!userId) return;

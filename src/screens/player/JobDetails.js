@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -105,7 +106,7 @@ const STATUS_BANNERS = {
     bg: "#D7F4E1",
     title: "Upcoming",
     // {timeLabel} placeholder is replaced at render time with the route param
-    message: "Your match is coming up – {timeLabel}. Be prepared and arrive on time.",
+    message: "Your match is coming up â€“ {timeLabel}. Be prepared and arrive on time.",
   },
   Completed: {
     bg: "#D7F4E1",
@@ -149,7 +150,7 @@ const JobDetails = () => {
       let active = true;
       (async () => {
         try {
-          const token = await AsyncStorage.getItem("auth_token");
+          const token = await getToken();
           const headers = { Authorization: `Bearer ${token}` };
           const reqs = [];
           if (jobId) reqs.push(axios.get(JOBS.POSTING_BY_ID(jobId), { headers }));
@@ -192,7 +193,7 @@ const JobDetails = () => {
     }
     try {
       setSubmitting(true);
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(
         JOBS.APPLY,
         {
@@ -227,7 +228,7 @@ const JobDetails = () => {
   const benefitList = job?.benefits?.length ? job.benefits : BENEFITS;
   const org = job?.organizer || {};
   const orgName = org.name || "Mumbai Premier League";
-  const inr = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+  const inr = (n) => `â‚¹${Number(n || 0).toLocaleString("en-IN")}`;
 
   // My professional profiles shown in the "Select professional Profile" list
   const myProfileCards = profiles.map((p) => ({
@@ -240,7 +241,7 @@ const JobDetails = () => {
 
   const renderBullet = (text, key) => (
     <View key={key} style={styles.bulletRow}>
-      <Text style={styles.bulletDot}>•</Text>
+      <Text style={styles.bulletDot}>â€¢</Text>
       <Text style={styles.bulletText}>{text}</Text>
     </View>
   );
@@ -506,7 +507,7 @@ const JobDetails = () => {
                       ? `${inr(job.estimatedEarnings)} /-`
                       : job?.ratePerMatch != null
                       ? `${inr(job.ratePerMatch)} /-`
-                      : "—")}
+                      : "â€”")}
                 </Text>
               </View>
 
@@ -515,7 +516,7 @@ const JobDetails = () => {
               {myProfileCards.length === 0 && (
                 <Text style={styles.bodyTextPlain}>
                   You have no professional profiles yet. You can still apply, or create one from
-                  Browse Jobs → Application → My Profile.
+                  Browse Jobs â†’ Application â†’ My Profile.
                 </Text>
               )}
 
@@ -545,7 +546,7 @@ const JobDetails = () => {
                       <Text style={styles.profileTitle}>{p.title}</Text>
                       <View style={styles.profileMetaRow}>
                         <Text style={styles.profileMetaText}>{p.sport}</Text>
-                        <Text style={styles.profileMetaDot}>•</Text>
+                        <Text style={styles.profileMetaDot}>â€¢</Text>
                         <Text style={styles.profileMetaText}>{p.level}</Text>
                       </View>
                     </View>

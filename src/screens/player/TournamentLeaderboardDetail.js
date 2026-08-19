@@ -12,6 +12,7 @@ import {
   Alert,
   TextInput,
   Switch,
+  InteractionManager,
 } from 'react-native';
 import { MaterialIcons, FontAwesome5, Feather, Ionicons } from '@expo/vector-icons';
 import API from '../../api/tournaments';
@@ -31,6 +32,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import { captureRef } from 'react-native-view-shot';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import withErrorBoundary from "../../components/withErrorBoundary";
 
 /**
  * Detects whether the match format uses nested games (Tennis) or flat sets (TT, Badminton).
@@ -785,24 +787,30 @@ const TournamentLeaderboardDetail = ({ route, navigation }) => {
   // No changes needed to columns, keeping them for the leaderboard view mode
 
   // DATA FETCHING
+  // Deferred behind InteractionManager so the fetch dispatch + the heavy
+  // post-fetch enrichment don't run during the screen's open animation —
+  // this removes the "hang for a beat" when the leaderboard is pushed.
   useEffect(() => {
-    if (isGroupStage) {
-      fetchGroups();
-      fetchKnockoutMatches();
-      fetchAllGroupTopPlayers();
-    } else if (isSinglesKnockout || isTeamKnockout) {
-      // Pure-knockout tournaments (singles or team) have no group standings
-      // to render. fetchKnockoutMatches pulls from all 3 collections
-      // (SuperMatch, DirectKnockoutMatch, TeamKnockoutMatches) and unifies
-      // them into one bracket array.
-      fetchKnockoutMatches();
-      // Team knockouts (Davis Cup) also have a Round Robin pre-phase.
-      // Standings come from a separate endpoint backed by round=0 matches.
-      if (isTeamKnockout) {
-        fetchRoundRobinStandings();
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (isGroupStage) {
+        fetchGroups();
+        fetchKnockoutMatches();
+        fetchAllGroupTopPlayers();
+      } else if (isSinglesKnockout || isTeamKnockout) {
+        // Pure-knockout tournaments (singles or team) have no group standings
+        // to render. fetchKnockoutMatches pulls from all 3 collections
+        // (SuperMatch, DirectKnockoutMatch, TeamKnockoutMatches) and unifies
+        // them into one bracket array.
+        fetchKnockoutMatches();
+        // Team knockouts (Davis Cup) also have a Round Robin pre-phase.
+        // Standings come from a separate endpoint backed by round=0 matches.
+        if (isTeamKnockout) {
+          fetchRoundRobinStandings();
+        }
       }
-    }
-    fetchLeaderboardData();
+      fetchLeaderboardData();
+    });
+    return () => task.cancel();
   }, [tournamentType, tournamentId, activeSportId]);
 
   // When the SPORT changes, drop any open group's match view + cached matches.
@@ -6044,4 +6052,6 @@ const rrStyles = StyleSheet.create({
   },
 });
 
-export default TournamentLeaderboardDetail;
+// §5.2 — own boundary so one malformed record crashes THIS screen
+// rather than the whole app; Back still works and the nav stack survives.
+export default withErrorBoundary(TournamentLeaderboardDetail, "this tournament");

@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -39,13 +40,13 @@ const TXN_ICON = {
   academy: { icon: "school", bg: "#F6ECFF", color: "#A855F7" },
 };
 
-// ₹70,300 (full) and compact ₹35k / ₹4.8L
-const inrFull = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+// â‚¹70,300 (full) and compact â‚¹35k / â‚¹4.8L
+const inrFull = (n) => `â‚¹${Number(n || 0).toLocaleString("en-IN")}`;
 const inrCompact = (n) => {
   const v = Number(n) || 0;
-  if (v >= 100000) return `₹${(v / 100000) % 1 === 0 ? v / 100000 : (v / 100000).toFixed(1)}L`;
-  if (v >= 1000) return `₹${(v / 1000) % 1 === 0 ? v / 1000 : (v / 1000).toFixed(1)}k`;
-  return `₹${v}`;
+  if (v >= 100000) return `â‚¹${(v / 100000) % 1 === 0 ? v / 100000 : (v / 100000).toFixed(1)}L`;
+  if (v >= 1000) return `â‚¹${(v / 1000) % 1 === 0 ? v / 1000 : (v / 1000).toFixed(1)}k`;
+  return `â‚¹${v}`;
 };
 
 const TrainerEarnings = () => {
@@ -64,7 +65,7 @@ const TrainerEarnings = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(`${TRAINER.EARNINGS(userId)}?period=${period}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -188,7 +189,7 @@ const TrainerEarnings = () => {
                       <Text style={styles.txnName}>{t.title}</Text>
                       <Text style={styles.txnDate}>{t.date}</Text>
                     </View>
-                    <Text style={styles.txnAmount}>↗ {inrFull(t.amount)}</Text>
+                    <Text style={styles.txnAmount}>â†— {inrFull(t.amount)}</Text>
                   </View>
                 );
               })}

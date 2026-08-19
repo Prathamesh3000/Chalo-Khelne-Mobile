@@ -18,7 +18,7 @@ import {
 import { MaterialIcons, FontAwesome5, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../context/AuthContext";
-import { getSportName, getTournamentType } from "../../utils/sportTrack";
+import { getSportName, getTournamentType, isDoublesCategory } from "../../utils/sportTrack";
 import axios from "axios";
 import apiConfig from "../../api/api";
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,6 +53,28 @@ const BookingScreen = ({ route }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated } = useAuth();
+
+  // ── Doubles categories need a partner ──
+  //
+  // A doubles entry is ONE entrant made of two people, so the pair has to be
+  // named at registration — there is no later step that pairs anyone up. The
+  // partner belongs to a (booking, category) pair, not to the booking: one
+  // booking can cover Men's Doubles and Mixed Doubles with a different partner
+  // in each, and the booking carries only a single userName.
+  //
+  // "Doubles" is resolved per category from the tournament's sports[], so
+  // Men's Doubles asks for a partner while Men's Singles in the same booking
+  // does not. The server re-checks all of this — never trust the client.
+  const tournamentDoc = tournament?.rawData || tournament;
+  const selectionKey = (sel) =>
+    `${String(sel.sportId)}::${String(sel.categoryName || "").trim().toLowerCase()}`;
+
+  const doublesSelections = sportSelections.filter((sel) =>
+    isDoublesCategory(tournamentDoc, sel.sportId, sel.categoryName)
+  );
+
+  // { [selectionKey]: { name, userId, verified } }
+  const [partners, setPartners] = useState({});
 
   // Extract category fees if categories are selected
   const categoryFees = [];
@@ -194,6 +216,34 @@ const BookingScreen = ({ route }) => {
     setSearchType(null);
   };
 
+  // Partner fields reuse the same debounced player search as the team roster.
+  // `activeSearchIndex` holds the selection key here rather than a numeric
+  // index — the dropdown is keyed by whichever field is focused.
+  const handlePartnerChange = (key, value) => {
+    setPartners((prev) => ({
+      ...prev,
+      [key]: { name: value, userId: null, verified: false },
+    }));
+    setActiveSearchIndex(key);
+    setSearchType("partner");
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => searchUsers(value), 400);
+  };
+
+  const handleSelectPartner = (key, selectedUser) => {
+    setPartners((prev) => ({
+      ...prev,
+      [key]: {
+        name: selectedUser.name || selectedUser.fullName,
+        userId: selectedUser._id || selectedUser.id || null,
+        verified: true,
+      },
+    }));
+    setSearchResults([]);
+    setActiveSearchIndex(null);
+    setSearchType(null);
+  };
+
   const handleSubstituteChange = (index, value) => {
     const updatedSubs = [...substitutes];
     updatedSubs[index] = { name: value, verified: false };
@@ -262,6 +312,38 @@ const BookingScreen = ({ route }) => {
       }
     }
 
+    // ── Doubles partner, one per doubles category ──
+    // Required, and must be picked from the suggestions so the entry resolves
+    // to a real Chalo Khelne account rather than a typed-in name that never
+    // matches anybody. Same rule the team roster applies to its players.
+    const missingPartners = [];
+    const unverifiedPartners = [];
+    const selfPartners = [];
+    for (const sel of doublesSelections) {
+      const entry = partners[selectionKey(sel)];
+      const partnerName = (entry?.name || "").trim();
+      if (!partnerName) {
+        missingPartners.push(sel.categoryName);
+        continue;
+      }
+      if (!entry?.verified) {
+        unverifiedPartners.push(sel.categoryName);
+      }
+      if (partnerName.toLowerCase() === (name || "").trim().toLowerCase()) {
+        selfPartners.push(sel.categoryName);
+      }
+    }
+    if (missingPartners.length > 0) {
+      errors.partners = `Choose a partner for: ${missingPartners.join(", ")}`;
+    }
+    if (unverifiedPartners.length > 0) {
+      errors.partnersUnverified =
+        `Pick your partner from the search suggestions for: ${unverifiedPartners.join(", ")}`;
+    }
+    if (selfPartners.length > 0) {
+      errors.partnersSelf = `You cannot be your own partner in: ${selfPartners.join(", ")}`;
+    }
+
     if (!termsAccepted) errors.terms = "Please accept T&C";
 
     setValidationErrors(errors);
@@ -305,6 +387,19 @@ const BookingScreen = ({ route }) => {
         gender: null,
         ageCategory: null,
       }));
+      // Attach the doubles partner to the category it belongs to. Singles
+      // entries carry none, and the server strips any that slip through.
+      const sportSelectionsWithPartners = sportSelections.map((sel) => {
+        const entry = partners[selectionKey(sel)];
+        const partnerName = (entry?.name || "").trim();
+        if (!partnerName) return sel;
+        return {
+          ...sel,
+          partnerName,
+          partnerUserId: entry?.userId || null,
+        };
+      });
+
       const bookingData = {
         userId: user?.id || user?._id,
         tournamentId: tournament.id || tournament._id,
@@ -315,7 +410,7 @@ const BookingScreen = ({ route }) => {
         tournamentName: tournament.name,
         tournamentType: tournamentType,
         selectedCategories: apiSelectedCategories,
-        sportSelections,
+        sportSelections: sportSelectionsWithPartners,
         paymentAmount: totalFee,
         paymentMethod: "cash",
         employeeId: passedEmployeeId || null,
@@ -480,6 +575,127 @@ const BookingScreen = ({ route }) => {
               {renderModernInput("Email Address", email, setEmail, "mail-outline", "rahul@example.com", { errorKey: 'email', keyboardType: 'email-address', autoCapitalize: 'none' })}
               {renderModernInput("Phone Number", phone, handlePhoneChange, "call-outline", "10-digit mobile number", { errorKey: 'phone', keyboardType: 'numeric', maxLength: 10 })}
             </View>
+
+            {/* Doubles partner — one per doubles category the player picked. */}
+            {doublesSelections.length > 0 && (
+              <>
+                <View style={styles.sectionHeader}>
+                  <MaterialCommunityIcons name="account-multiple" size={22} color="#FF6A00" />
+                  <Text style={styles.sectionTitle}>
+                    {doublesSelections.length === 1 ? "Doubles Partner" : "Doubles Partners"}
+                  </Text>
+                </View>
+                <View style={styles.modernCard}>
+                  <Text style={[styles.subLabel, { marginBottom: 8 }]}>
+                    A doubles entry is one team of two. Search for your partner
+                    and pick them from the list.
+                  </Text>
+
+                  {doublesSelections.map((sel) => {
+                    const key = selectionKey(sel);
+                    const entry = partners[key] || {};
+                    const showResults =
+                      activeSearchIndex === key &&
+                      searchType === "partner" &&
+                      searchResults.length > 0;
+                    const hasError =
+                      (validationErrors.partners ||
+                        validationErrors.partnersUnverified ||
+                        validationErrors.partnersSelf) &&
+                      (!entry.name?.trim() || !entry.verified);
+
+                    return (
+                      <View key={key} style={{ marginBottom: 10 }}>
+                        <Text style={styles.subLabel}>
+                          {sel.categoryName}
+                          {sel.sportName ? ` · ${sel.sportName}` : ""}
+                        </Text>
+                        <View style={styles.playerRow}>
+                          <View style={styles.playerNum}>
+                            <Text style={styles.pNumText}>2</Text>
+                          </View>
+                          <TextInput
+                            style={[
+                              styles.playerInput,
+                              hasError && styles.pInputErr,
+                              entry.verified && { borderColor: '#34C759', borderWidth: 1.5 },
+                            ]}
+                            placeholder="Search your partner's name..."
+                            value={entry.name || ""}
+                            onChangeText={(v) => handlePartnerChange(key, v)}
+                            placeholderTextColor="#CFD8DC"
+                            onFocus={() => { setActiveSearchIndex(key); setSearchType("partner"); }}
+                            onBlur={() => setTimeout(() => {
+                              if (activeSearchIndex === key) {
+                                setSearchResults([]);
+                                setActiveSearchIndex(null);
+                              }
+                            }, 200)}
+                          />
+                          {entry.verified && (
+                            <MaterialIcons
+                              name="verified"
+                              size={18}
+                              color="#34C759"
+                              style={{ position: 'absolute', right: 10, top: 12 }}
+                            />
+                          )}
+                        </View>
+
+                        {showResults && (
+                          <View style={{
+                            backgroundColor: '#FFF', borderRadius: 10, marginTop: 2, marginLeft: 36,
+                            borderWidth: 1, borderColor: '#E5E7EB', maxHeight: 160,
+                            shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.1, shadowRadius: 4, elevation: 4,
+                          }}>
+                            <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                              {searchResults.map((u, idx) => (
+                                <TouchableOpacity
+                                  key={u._id || idx}
+                                  onPress={() => handleSelectPartner(key, u)}
+                                  style={{
+                                    flexDirection: 'row', alignItems: 'center',
+                                    paddingVertical: 10, paddingHorizontal: 14,
+                                    borderBottomWidth: idx < searchResults.length - 1 ? 1 : 0,
+                                    borderBottomColor: '#F3F4F6',
+                                  }}
+                                >
+                                  <MaterialCommunityIcons name="account-circle" size={24} color="#FF6A00" style={{ marginRight: 10 }} />
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#1F2937' }}>{u.name || u.fullName}</Text>
+                                    {u.mobile && <Text style={{ fontSize: 10, color: '#9CA3AF' }}>{u.mobile}</Text>}
+                                  </View>
+                                  <MaterialIcons name="add-circle-outline" size={20} color="#34C759" />
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+
+                        {entry.verified && (
+                          <Text style={{ fontSize: 11, color: '#2E7D32', marginTop: 4, marginLeft: 36 }}>
+                            Entering as {name || "you"} & {entry.name}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {[
+                    validationErrors.partners,
+                    validationErrors.partnersUnverified,
+                    validationErrors.partnersSelf,
+                  ]
+                    .filter(Boolean)
+                    .map((msg, i) => (
+                      <Text key={i} style={{ fontSize: 11, color: '#C62828', marginTop: 4 }}>
+                        {msg}
+                      </Text>
+                    ))}
+                </View>
+              </>
+            )}
 
             {/* Team Details — shown only in "team" booking mode */}
             {isTeamBooking && (

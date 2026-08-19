@@ -119,13 +119,18 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
   const getSocket = useCallback(() => socketRef.current, []);
 
-  const value: ChatContextValue = {
-    unreadTotal,
-    setUnreadTotal,
-    fetchUnreadTotal,
-    decrementUnread,
-    getSocket,
-  };
+  // Memoized so useChat() consumers (badge counters) don't re-render on every
+  // provider render — only when unreadTotal actually changes.
+  const value = React.useMemo<ChatContextValue>(
+    () => ({
+      unreadTotal,
+      setUnreadTotal,
+      fetchUnreadTotal,
+      decrementUnread,
+      getSocket,
+    }),
+    [unreadTotal, fetchUnreadTotal, decrementUnread, getSocket]
+  );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 };

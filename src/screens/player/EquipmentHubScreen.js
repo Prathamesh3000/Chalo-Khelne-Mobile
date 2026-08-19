@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -37,7 +38,7 @@ const BORDER = "#EEF1FA";
 
 const BASE = `${API.BASE_URL}/donations`;
 
-// ─── Hero banner ──────────────────────────────────────────────────────
+// â”€â”€â”€ Hero banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Hero = ({ onSellPress }) => (
   <LinearGradient
     colors={["#B89DE3", "#8A6FD6"]}
@@ -66,7 +67,7 @@ const Hero = ({ onSellPress }) => (
   </LinearGradient>
 );
 
-// ─── Header ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Header = ({ onMenuPress }) => (
   <View style={styles.header}>
     <Text style={styles.headerTitle}>Equipment Store</Text>
@@ -79,7 +80,7 @@ const Header = ({ onMenuPress }) => (
   </View>
 );
 
-// ─── Search ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SearchBar = ({ value, onChangeText }) => (
   <View style={styles.searchBar}>
     <Ionicons name="search" size={18} color={TEXT_MUTED} />
@@ -97,7 +98,7 @@ const SearchBar = ({ value, onChangeText }) => (
   </View>
 );
 
-// ─── Sport chips ──────────────────────────────────────────────────────
+// â”€â”€â”€ Sport chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Chips = ({ chips, active, onSelect }) => (
   <ScrollView
     horizontal
@@ -122,7 +123,7 @@ const Chips = ({ chips, active, onSelect }) => (
   </ScrollView>
 );
 
-// ─── Empty / loading ──────────────────────────────────────────────────
+// â”€â”€â”€ Empty / loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ListEmpty = ({ loading, search, activeSport }) => {
   if (loading) {
     return (
@@ -159,7 +160,7 @@ export default function EquipmentHubScreen() {
 
   const fetchData = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await axios.get(`${BASE}/listings`, { headers });
       setItems(res.data?.data || []);
@@ -183,7 +184,7 @@ export default function EquipmentHubScreen() {
     }, [])
   );
 
-  // ─── Sport chips: All + unique sports from listings ─────────────────
+  // â”€â”€â”€ Sport chips: All + unique sports from listings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sportChips = React.useMemo(() => {
     const sports = new Set();
     items.forEach((i) => {
@@ -192,7 +193,7 @@ export default function EquipmentHubScreen() {
     return ["All", ...Array.from(sports)];
   }, [items]);
 
-  // ─── Filtering ──────────────────────────────────────────────────────
+  // â”€â”€â”€ Filtering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const visibleItems = React.useMemo(() => {
     let list = items;
     if (activeSport !== "All") {
@@ -212,7 +213,7 @@ export default function EquipmentHubScreen() {
     return list;
   }, [items, activeSport, search]);
 
-  // ─── Card actions ───────────────────────────────────────────────────
+  // â”€â”€â”€ Card actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const toggleFavorite = (id) => {
     setFavorites((prev) => {
       const next = new Set(prev);
@@ -261,7 +262,7 @@ export default function EquipmentHubScreen() {
     ]);
   };
 
-  // ─── Renderers ──────────────────────────────────────────────────────
+  // â”€â”€â”€ Renderers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const renderItem = ({ item }) => {
     const isFree = item.isDonation || item.askingPrice === 0;
     const imageUrl = assetUrl(item.images?.[0]);
@@ -328,10 +329,10 @@ export default function EquipmentHubScreen() {
               ) : (
                 <>
                   {item.originalPrice ? (
-                    <Text style={styles.strikePrice}>₹{item.originalPrice}</Text>
+                    <Text style={styles.strikePrice}>â‚¹{item.originalPrice}</Text>
                   ) : null}
                   <Text style={styles.priceText}>
-                    ₹{item.askingPrice || item.price || 0}/-
+                    â‚¹{item.askingPrice || item.price || 0}/-
                   </Text>
                 </>
               )}

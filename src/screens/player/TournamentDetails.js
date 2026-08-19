@@ -31,6 +31,7 @@ import { getSportName } from "../../utils/sportTrack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DOBGateModal from "./DOBGateModal";
+import TournamentCheckInCard from "../../components/TournamentCheckInCard";
 
 const { width } = Dimensions.get("window");
 
@@ -575,6 +576,14 @@ const TournamentDetails = ({ route, navigation }) => {
           </View>
         ) : (
           <View style={styles.detailsContent}>
+            {/* Tournament-day self check-in. Renders nothing unless this
+                player is actually registered, so it costs non-entrants
+                nothing. Placed above the fold: on the day it is the single
+                most important action on this screen. */}
+            <TournamentCheckInCard
+              tournamentId={tournament._id || tournament.id || tournamentId}
+            />
+
             {/* Title card — overlaps the banner */}
             <View style={styles.titleCard}>
               <View style={styles.titleRow}>
@@ -735,13 +744,15 @@ const TournamentDetails = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Bottom spacer so content isn't hidden behind the action bar */}
-        <View style={{ height: isPastTournament ? 40 : 180 }} />
+        {/* Bottom spacer so content isn't hidden behind the action bar.
+            Tracks the bar's real height (~128) + the same safe-area inset it
+            pads with, so the two can't drift apart. */}
+        <View style={{ height: isPastTournament ? 40 : 150 + insets.bottom }} />
       </ScrollView>
 
       {/* Floating action bar */}
       {!loading && !isPastTournament && (
-        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 90 }]}>
+        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.actionTopRow}>
             <TouchableOpacity
               style={styles.outlinePill}

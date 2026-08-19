@@ -22,6 +22,7 @@ import axios from "axios";
 import useTournamentSports from "../../hooks/useTournamentSports";
 import SportTabStrip from "../../components/SportTabStrip";
 import { withSport } from "../../utils/sportQuery";
+import withErrorBoundary from "../../components/withErrorBoundary";
 
 const { width } = Dimensions.get("window");
 
@@ -562,4 +563,6 @@ const styles = StyleSheet.create({
   errorText: { color: '#D32F2F', fontSize: 13, fontWeight: '600', marginLeft: 10 }
 });
 
-export default Tournament;
+// §5.2 — own boundary so one malformed record crashes THIS screen
+// rather than the whole app; Back still works and the nav stack survives.
+export default withErrorBoundary(Tournament, "the group stage");

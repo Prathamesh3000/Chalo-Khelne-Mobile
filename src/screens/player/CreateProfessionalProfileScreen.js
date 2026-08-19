@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState } from "react";
 import {
   View,
@@ -243,7 +244,7 @@ const CreateProfessionalProfileScreen = () => {
     };
     try {
       setSubmitting(true);
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(JOBS.CREATE_PROFILE, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -652,7 +653,7 @@ const CreateProfessionalProfileScreen = () => {
               <Text style={styles.sectionTitle}>Your Rate</Text>
               <TextInput
                 style={styles.rateInput}
-                placeholder="Enter amount in ₹"
+                placeholder="Enter amount in â‚¹"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
                 value={rateAmount}
@@ -756,7 +757,7 @@ const CreateProfessionalProfileScreen = () => {
               )}
 
               <Text style={styles.charCount}>
-                {certificates.length}/3 files · PDF or image, up to 5 MB each
+                {certificates.length}/3 files Â· PDF or image, up to 5 MB each
               </Text>
             </View>
 
@@ -875,7 +876,7 @@ const CreateProfessionalProfileScreen = () => {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.pricingLabel}>Your Rate</Text>
                     <Text style={styles.pricingAmount}>
-                      ₹{formattedRate}
+                      â‚¹{formattedRate}
                       <Text style={styles.pricingPer}>  {displayRateType}</Text>
                     </Text>
                   </View>

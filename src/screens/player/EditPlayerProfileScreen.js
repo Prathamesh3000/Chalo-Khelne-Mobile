@@ -21,7 +21,6 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../context/AuthContext";
 import AUTH from "../../api/auth";
 import API from "../../api/api";
@@ -167,8 +166,6 @@ const EditPlayerProfileScreen = () => {
     }
   }, [initialProfile.profileImage]);
 
-  const getToken = () => AsyncStorage.getItem("auth_token");
-
   // ─── Image upload ──────────────────────────────────────────────────
   const pickAndUploadAvatar = async () => {
     try {
@@ -196,7 +193,6 @@ const EditPlayerProfileScreen = () => {
   const uploadProfileImage = async (asset) => {
     setUploadingImage(true);
     try {
-      const token = await getToken();
       const userId = user?.id || user?._id;
       const fd = new FormData();
       fd.append("profile-image", {
@@ -204,9 +200,10 @@ const EditPlayerProfileScreen = () => {
         type: "image/jpeg",
         name: "profile-image.jpg",
       });
+      // No Authorization/Content-Type here on purpose: authFetch attaches the
+      // live token, and RN must set the multipart boundary itself.
       const res = await authFetch(AUTH.ENDPOINTS.USER.UPLOAD_IMAGE(userId), {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
       if (!res.ok) throw new Error("Upload failed");
@@ -237,7 +234,6 @@ const EditPlayerProfileScreen = () => {
 
     setLoading(true);
     try {
-      const token = await getToken();
       const userId = user?.id || user?._id;
       const dobDate = parseDateInput(dob);
       const payload = {
@@ -258,10 +254,7 @@ const EditPlayerProfileScreen = () => {
 
       const res = await authFetch(AUTH.ENDPOINTS.USER.PROFILE(userId), {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 

@@ -1,9 +1,11 @@
-import React, { useState, useRef, useCallback } from "react";
+﻿import { getToken } from "../../services/tokenStore";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   Image,
@@ -59,7 +61,7 @@ const SAMPLE_JOBS = [
     sport: "Cricket",
     date: "14 Oct 2026",
     applicants: 8,
-    rate: "₹799/-",
+    rate: "â‚¹799/-",
     rateUnit: "per hour",
   },
   {
@@ -72,7 +74,7 @@ const SAMPLE_JOBS = [
     sport: "Football",
     date: "18 Oct 2026",
     applicants: 5,
-    rate: "₹1,200/-",
+    rate: "â‚¹1,200/-",
     rateUnit: "per hour",
   },
   {
@@ -85,7 +87,7 @@ const SAMPLE_JOBS = [
     sport: "Cricket",
     date: "22 Oct 2026",
     applicants: 12,
-    rate: "₹999/-",
+    rate: "â‚¹999/-",
     rateUnit: "per hour",
   },
   {
@@ -98,7 +100,7 @@ const SAMPLE_JOBS = [
     sport: "Badminton",
     date: "25 Oct 2026",
     applicants: 3,
-    rate: "₹1,500/-",
+    rate: "â‚¹1,500/-",
     rateUnit: "per hour",
   },
   {
@@ -111,7 +113,7 @@ const SAMPLE_JOBS = [
     sport: "Cricket",
     date: "28 Oct 2026",
     applicants: 7,
-    rate: "₹699/-",
+    rate: "â‚¹699/-",
     rateUnit: "per hour",
   },
 ];
@@ -125,7 +127,7 @@ const APPLICATIONS = [
     title: "Referee Needed",
     venue: "Andheri Sports Complex",
     appliedOn: "5 May",
-    rate: "₹799/-",
+    rate: "â‚¹799/-",
     rateUnit: "per hour",
     status: "Shortlist",
   },
@@ -134,7 +136,7 @@ const APPLICATIONS = [
     title: "Referee Needed",
     venue: "Andheri Sports Complex",
     appliedOn: "5 May",
-    rate: "₹799/-",
+    rate: "â‚¹799/-",
     rateUnit: "per hour",
     status: "Pending",
   },
@@ -143,7 +145,7 @@ const APPLICATIONS = [
     title: "Referee Needed",
     venue: "Andheri Sports Complex",
     appliedOn: "5 May",
-    rate: "₹799/-",
+    rate: "â‚¹799/-",
     rateUnit: "per hour",
     status: "Accepted",
   },
@@ -152,7 +154,7 @@ const APPLICATIONS = [
     title: "Referee Needed",
     venue: "Andheri Sports Complex",
     appliedOn: "5 May",
-    rate: "₹799/-",
+    rate: "â‚¹799/-",
     rateUnit: "per hour",
     status: "Rejected",
   },
@@ -172,8 +174,8 @@ const SUB_TABS = [
 ];
 
 const PROFILE_STATS = [
-  { key: "earnings", label: "Total Earnings", value: "₹1,25,000", sub: "All Time", valueColor: "#258C3F" },
-  { key: "month", label: "This Month", value: "₹1,25,000", sub: "↑ 25% from last month", valueColor: "#258C3F" },
+  { key: "earnings", label: "Total Earnings", value: "â‚¹1,25,000", sub: "All Time", valueColor: "#258C3F" },
+  { key: "month", label: "This Month", value: "â‚¹1,25,000", sub: "â†‘ 25% from last month", valueColor: "#258C3F" },
   { key: "rating", label: "Rating", value: "4.8", sub: "42 Reviews", isRating: true, valueColor: "#666666" },
   { key: "jobs", label: "Total Jobs", value: "45", sub: "Completed", valueColor: "#666666" },
 ];
@@ -188,7 +190,7 @@ const PROFILE_JOBS = {
       location: "Andheri Sports Complex",
       time: "08:00 AM - 02:00 PM",
       date: "Monday, 15 May 2026",
-      rate: "₹2,500/-",
+      rate: "â‚¹2,500/-",
       status: "Confirmed",
     },
     {
@@ -199,7 +201,7 @@ const PROFILE_JOBS = {
       location: "Andheri Sports Complex",
       time: "08:00 AM - 02:00 PM",
       date: "Monday, 15 May 2026",
-      rate: "₹4,000/-",
+      rate: "â‚¹4,000/-",
       status: "Confirmed",
     },
     {
@@ -210,7 +212,7 @@ const PROFILE_JOBS = {
       location: "Andheri Sports Complex",
       time: "08:00 AM - 02:00 PM",
       date: "Monday, 15 May 2026",
-      rate: "₹3,000/-",
+      rate: "â‚¹3,000/-",
       status: "In Progress",
     },
   ],
@@ -222,7 +224,7 @@ const PROFILE_JOBS = {
       org: "Local Sports Club",
       location: "Marine Drive",
       date: "Monday, 25 May 2026",
-      rate: "₹2,000/-",
+      rate: "â‚¹2,000/-",
       timeLabel: "2 Day left",
     },
     {
@@ -232,7 +234,7 @@ const PROFILE_JOBS = {
       org: "Mumbai University",
       location: "Andheri Sports Complex",
       date: "Monday, 15 May 2026",
-      rate: "₹3,500/-",
+      rate: "â‚¹3,500/-",
       timeLabel: "2 h ago",
     },
     {
@@ -242,7 +244,7 @@ const PROFILE_JOBS = {
       org: "Sports Federation",
       location: "Powai Ground",
       date: "Friday, 30 May 2026",
-      rate: "₹2,500/-",
+      rate: "â‚¹2,500/-",
       timeLabel: "5 Day left",
     },
     {
@@ -252,7 +254,7 @@ const PROFILE_JOBS = {
       org: "Pune Sports Club",
       location: "Kothrud Badminton Hall",
       date: "Sunday, 1 June 2026",
-      rate: "₹1,200/-",
+      rate: "â‚¹1,200/-",
       timeLabel: "7 Day left",
     },
     {
@@ -262,7 +264,7 @@ const PROFILE_JOBS = {
       org: "Tech Crop Events",
       location: "DY Patil Stadium",
       date: "Saturday, 7 June 2026",
-      rate: "₹2,800/-",
+      rate: "â‚¹2,800/-",
       timeLabel: "13 Day left",
     },
   ],
@@ -273,7 +275,7 @@ const PROFILE_JOBS = {
       event: "State Level Tournament",
       org: "Maharashtra Cricket Association",
       completedOn: "25 May 2026",
-      earned: "₹3,000/-",
+      earned: "â‚¹3,000/-",
       rating: 5.0,
       review: "Excellent referee! Very professional and punctual.",
     },
@@ -283,7 +285,7 @@ const PROFILE_JOBS = {
       event: "Corporate Match",
       org: "XYZ Company",
       completedOn: "1 May 2026",
-      earned: "₹2,500/-",
+      earned: "â‚¹2,500/-",
       rating: 4.0,
       review: "Good quality footage",
     },
@@ -310,7 +312,7 @@ const REQUESTS = [
     role: "Referee",
     location: "Andheri Sports Complex",
     date: "15 May 2026",
-    rate: "₹1,500/-",
+    rate: "â‚¹1,500/-",
     isNew: true,
   },
   {
@@ -320,7 +322,7 @@ const REQUESTS = [
     role: "Commentator",
     location: "Powai Ground",
     date: "20 May 2026",
-    rate: "₹2,000/-",
+    rate: "â‚¹2,000/-",
     isNew: true,
   },
 ];
@@ -340,7 +342,7 @@ const PROFESSIONAL_PROFILES = [
     tier: "Professional",
     rating: "4.9",
     jobsDone: "32",
-    earned: "₹98,000",
+    earned: "â‚¹98,000",
     active: false,
   },
   {
@@ -350,7 +352,7 @@ const PROFESSIONAL_PROFILES = [
     tier: "Professional",
     rating: "4.9",
     jobsDone: "32",
-    earned: "₹98,000",
+    earned: "â‚¹98,000",
     active: true,
   },
   {
@@ -360,7 +362,7 @@ const PROFESSIONAL_PROFILES = [
     tier: "Professional",
     rating: "4.9",
     jobsDone: "32",
-    earned: "₹98,000",
+    earned: "â‚¹98,000",
     active: false,
   },
 ];
@@ -520,7 +522,7 @@ const BrowseJobs = () => {
   const [profileJobTab, setProfileJobTab] = useState("active");
   const [profileSportFilter, setProfileSportFilter] = useState("All");
 
-  // ── server-backed data ──
+  // â”€â”€ server-backed data â”€â”€
   const [jobsList, setJobsList] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -534,7 +536,7 @@ const BrowseJobs = () => {
   const [profilesActiveMap, setProfilesActiveMap] = useState({});
 
   const authHeaders = async () => {
-    const token = await AsyncStorage.getItem("auth_token");
+    const token = await getToken();
     return { Authorization: `Bearer ${token}` };
   };
 
@@ -556,7 +558,7 @@ const BrowseJobs = () => {
             sport: j.sport,
             date: j.schedule?.[0]?.date || "",
             applicants: j.applicantsCount || 0,
-            rate: `₹${(j.rate || 0).toLocaleString("en-IN")}/-`,
+            rate: `â‚¹${(j.rate || 0).toLocaleString("en-IN")}/-`,
             rateUnit: j.rateUnit || "per hour",
           }))
         );
@@ -626,7 +628,7 @@ const BrowseJobs = () => {
   }, [userId]);
 
   // Upcoming + live tournaments to apply to as staff (referee/scorer/etc.).
-  // Same "open for jobs" rule as BrowseTournamentJobs — hide only ended/completed.
+  // Same "open for jobs" rule as BrowseTournamentJobs â€” hide only ended/completed.
   const [tournaments, setTournaments] = useState([]);
   const fetchTournaments = useCallback(async () => {
     try {
@@ -646,7 +648,7 @@ const BrowseJobs = () => {
         })
       );
     } catch (e) {
-      // Non-fatal — the tournaments section just stays empty.
+      // Non-fatal â€” the tournaments section just stays empty.
     }
   }, []);
 
@@ -732,7 +734,7 @@ const BrowseJobs = () => {
     { label: "Rejected", value: pad2(appStats.rejected) },
   ];
 
-  // Professional profile cards (My Profile → Profile tab)
+  // Professional profile cards (My Profile â†’ Profile tab)
   const professionalCards = myProfiles.map((p) => ({
     id: String(p._id),
     role: ROLE_LABELS[p.role] || p.role,
@@ -740,7 +742,7 @@ const BrowseJobs = () => {
     tier: p.tier || "Professional",
     rating: p.rating || 0,
     jobsDone: 0,
-    earned: "₹0",
+    earned: "â‚¹0",
   }));
 
   const visibleProfiles =
@@ -753,14 +755,14 @@ const BrowseJobs = () => {
     {
       key: "earnings",
       label: "Total Earnings",
-      value: dashStats?.totalEarnings || "₹0",
+      value: dashStats?.totalEarnings || "â‚¹0",
       sub: "All Time",
       valueColor: "#258C3F",
     },
     {
       key: "month",
       label: "This Month",
-      value: dashStats?.thisMonth || "₹0",
+      value: dashStats?.thisMonth || "â‚¹0",
       sub: "Current month",
       valueColor: "#258C3F",
     },
@@ -816,25 +818,29 @@ const BrowseJobs = () => {
     }
   };
 
-  const filteredJobs = jobsList.filter((job) => {
-    if (selectedRoles.length > 0 && !selectedRoles.includes(job.role)) return false;
-    if (selectedSports.length > 0 && !selectedSports.includes(job.sport)) return false;
-    const q = search.trim().toLowerCase();
-    if (q) {
-      const haystack = [
-        job.title,
-        job.role,
-        job.venue,
-        job.manager,
-        job.location,
-        job.sport,
-      ]
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
+  const filteredJobs = useMemo(
+    () =>
+      jobsList.filter((job) => {
+        if (selectedRoles.length > 0 && !selectedRoles.includes(job.role)) return false;
+        if (selectedSports.length > 0 && !selectedSports.includes(job.sport)) return false;
+        const q = search.trim().toLowerCase();
+        if (q) {
+          const haystack = [
+            job.title,
+            job.role,
+            job.venue,
+            job.manager,
+            job.location,
+            job.sport,
+          ]
+            .join(" ")
+            .toLowerCase();
+          if (!haystack.includes(q)) return false;
+        }
+        return true;
+      }),
+    [jobsList, selectedRoles, selectedSports, search]
+  );
 
   const renderCheckRow = (label, checked, onToggle) => (
     <TouchableOpacity
@@ -1014,6 +1020,16 @@ const BrowseJobs = () => {
       </View>
     </TouchableOpacity>
   );
+
+  // FlatList item wrapper â€” supplies the horizontal padding the old jobsList
+  // container used to provide (the header keeps its own paddings).
+  const renderJobItem = useCallback(
+    ({ item }) => <View style={styles.jobItemWrap}>{renderJobCard(item)}</View>,
+    // renderJobCard closes over navigation/refereeUri (stable) â€” safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  const JobSeparator = useCallback(() => <View style={{ height: 12 }} />, []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1478,7 +1494,7 @@ const BrowseJobs = () => {
                               <View style={{ flex: 1, paddingRight: 10 }}>
                                 <Text style={styles.profCardTitle}>{p.role}</Text>
                                 <Text style={styles.profCardSubtitle}>
-                                  {p.sport} • {p.tier}
+                                  {p.sport} â€¢ {p.tier}
                                 </Text>
                               </View>
                               <TouchableOpacity
@@ -1545,11 +1561,36 @@ const BrowseJobs = () => {
           )}
         </View>
       ) : (
-        <ScrollView
+        <FlatList
           style={styles.scroll}
+          data={loadingJobs ? [] : filteredJobs}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderJobItem}
+          ItemSeparatorComponent={JobSeparator}
           contentContainerStyle={{ paddingBottom: 30 }}
           showsVerticalScrollIndicator={false}
-        >
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={8}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews
+          ListEmptyComponent={
+            loadingJobs ? (
+              <View style={styles.emptyResults}>
+                <ActivityIndicator size="large" color="#15A765" />
+              </View>
+            ) : (
+              <View style={styles.emptyResults}>
+                <Ionicons name="search-outline" size={40} color="#CCCCCC" />
+                <Text style={styles.emptyResultsTitle}>No opportunities found</Text>
+                <Text style={styles.emptyResultsHint}>
+                  Try a different search or clear the filters
+                </Text>
+              </View>
+            )
+          }
+          ListHeaderComponent={
+            <>
           {/* Need a Professional Section */}
           <View style={styles.heroSection}>
             <Text style={styles.heroTitle}>Need a Professional ?</Text>
@@ -1627,11 +1668,11 @@ const BrowseJobs = () => {
             </View>
           )}
 
-          {/* Tournaments — apply to officiate (referee/scorer/etc.) */}
+          {/* Tournaments â€” apply to officiate (referee/scorer/etc.) */}
           {tournaments.length > 0 && (
             <View style={{ marginTop: 4, marginBottom: 10 }}>
               <Text style={{ fontSize: 15, fontWeight: "800", color: "#1F2937", marginBottom: 8, paddingHorizontal: 2 }}>
-                Tournaments — apply to officiate
+                Tournaments â€” apply to officiate
               </Text>
               {tournaments
                 .filter((t) => !search || (t.title || "").toLowerCase().includes(search.toLowerCase()))
@@ -1652,7 +1693,7 @@ const BrowseJobs = () => {
                           {t.title || "Tournament"}
                         </Text>
                         <Text numberOfLines={1} style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
-                          {[sportNames, dateLabel].filter(Boolean).join(" · ") || "Open for staff"}
+                          {[sportNames, dateLabel].filter(Boolean).join(" Â· ") || "Open for staff"}
                         </Text>
                       </View>
                       <View style={{ backgroundColor: "#15A765", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, flexDirection: "row", alignItems: "center" }}>
@@ -1665,25 +1706,11 @@ const BrowseJobs = () => {
             </View>
           )}
 
-          {/* Job Listings */}
-          <View style={styles.jobsList}>
-            {loadingJobs ? (
-              <View style={styles.emptyResults}>
-                <ActivityIndicator size="large" color="#15A765" />
-              </View>
-            ) : filteredJobs.length > 0 ? (
-              filteredJobs.map(renderJobCard)
-            ) : (
-              <View style={styles.emptyResults}>
-                <Ionicons name="search-outline" size={40} color="#CCCCCC" />
-                <Text style={styles.emptyResultsTitle}>No opportunities found</Text>
-                <Text style={styles.emptyResultsHint}>
-                  Try a different search or clear the filters
-                </Text>
-              </View>
-            )}
-          </View>
-        </ScrollView>
+          {/* 16px gap before the first job card (was jobsList paddingTop) */}
+          <View style={{ height: 16 }} />
+            </>
+          }
+        />
       )}
 
       {/* Activate Profile Confirmation */}
@@ -1707,10 +1734,10 @@ const BrowseJobs = () => {
               Your {(activateConfirmProfile?.role || "referee").toLowerCase()} profile will become active and visible for:
             </Text>
             <View style={styles.activateList}>
-              <Text style={styles.activateBullet}>{"•"}  Match requests</Text>
-              <Text style={styles.activateBullet}>{"•"}  Tournament assignments</Text>
+              <Text style={styles.activateBullet}>{"â€¢"}  Match requests</Text>
+              <Text style={styles.activateBullet}>{"â€¢"}  Tournament assignments</Text>
               <Text style={styles.activateBullet}>
-                {"•"}  {activateConfirmProfile?.role || "Referee"} job opportunities
+                {"â€¢"}  {activateConfirmProfile?.role || "Referee"} job opportunities
               </Text>
             </View>
             <Text style={styles.activateSwitchNote}>You can switch profiles anytime.</Text>
@@ -1753,9 +1780,9 @@ const BrowseJobs = () => {
             </Text>
             <Text style={styles.activateBody}>You will stop receiving:</Text>
             <View style={styles.activateList}>
-              <Text style={styles.activateBullet}>{"•"}  Match requests</Text>
-              <Text style={styles.activateBullet}>{"•"}  Job applications</Text>
-              <Text style={styles.activateBullet}>{"•"}  Tournament invitations</Text>
+              <Text style={styles.activateBullet}>{"â€¢"}  Match requests</Text>
+              <Text style={styles.activateBullet}>{"â€¢"}  Job applications</Text>
+              <Text style={styles.activateBullet}>{"â€¢"}  Tournament invitations</Text>
             </View>
             <Text style={styles.activateSwitchNote}>
               Your profile data and history will remain safe.
@@ -1806,9 +1833,9 @@ const BrowseJobs = () => {
             <Text style={styles.reqPopupBody}>Event has been added to your schedule.</Text>
             <Text style={styles.reqPopupBody}>You will receive:</Text>
             <View style={styles.reqPopupList}>
-              <Text style={styles.reqPopupBullet}>{"•"}  Match reminders</Text>
-              <Text style={styles.reqPopupBullet}>{"•"}  Live scoreboard access</Text>
-              <Text style={styles.reqPopupBullet}>{"•"}  Event updates</Text>
+              <Text style={styles.reqPopupBullet}>{"â€¢"}  Match reminders</Text>
+              <Text style={styles.reqPopupBullet}>{"â€¢"}  Live scoreboard access</Text>
+              <Text style={styles.reqPopupBullet}>{"â€¢"}  Event updates</Text>
             </View>
             <TouchableOpacity
               style={styles.reqPopupOutlineBtn}
@@ -1859,9 +1886,9 @@ const BrowseJobs = () => {
             <Text style={styles.reqPopupBody}>The request has been declined.</Text>
             <Text style={styles.reqPopupBody}>Please note:</Text>
             <View style={styles.reqPopupList}>
-              <Text style={styles.reqPopupBullet}>{"•"}  Requester will be notified</Text>
-              <Text style={styles.reqPopupBullet}>{"•"}  Event will not be added to your schedule</Text>
-              <Text style={styles.reqPopupBullet}>{"•"}  You can review past requests anytime</Text>
+              <Text style={styles.reqPopupBullet}>{"â€¢"}  Requester will be notified</Text>
+              <Text style={styles.reqPopupBullet}>{"â€¢"}  Event will not be added to your schedule</Text>
+              <Text style={styles.reqPopupBullet}>{"â€¢"}  You can review past requests anytime</Text>
             </View>
             <TouchableOpacity
               style={styles.reqPopupOutlineBtn}
@@ -2154,6 +2181,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     gap: 12,
+  },
+  jobItemWrap: {
+    paddingHorizontal: 16,
   },
   jobCard: {
     flexDirection: "column",

@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState } from "react";
 import {
   View,
@@ -92,7 +93,7 @@ const TrainerCreateSession = () => {
     };
     try {
       setSubmitting(true);
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.post(TRAINER.CREATE_SESSION, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -194,8 +195,8 @@ const TrainerCreateSession = () => {
           onChangeText={setMaxPlayers}
         />
 
-        <Label>Price per Session (₹)</Label>
-        <TextInput style={styles.input} placeholder="₹ 0" placeholderTextColor="#9A9A9A" keyboardType="numeric" value={price} onChangeText={setPrice} />
+        <Label>Price per Session (â‚¹)</Label>
+        <TextInput style={styles.input} placeholder="â‚¹ 0" placeholderTextColor="#9A9A9A" keyboardType="numeric" value={price} onChangeText={setPrice} />
 
         <Label>Description / Notes</Label>
         <TextInput

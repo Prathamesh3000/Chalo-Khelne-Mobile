@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -54,7 +55,7 @@ const resolveStoryImage = (image) => {
   return assetUrl(image);
 };
 
-// ─── Full-screen story viewer for own stories ────────────────────────────
+// â”€â”€â”€ Full-screen story viewer for own stories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const StoryViewModal = ({ visible, onClose, stories, initialIndex = 0, onDelete }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const progress = useRef(new Animated.Value(0)).current;
@@ -78,7 +79,9 @@ const StoryViewModal = ({ visible, onClose, stories, initialIndex = 0, onDelete 
     Animated.timing(progress, {
       toValue: 1,
       duration: STORY_DURATION,
-      useNativeDriver: false,
+      // Native driver: animate scaleX (transform) not width, so it runs on the
+      // UI thread and stays smooth while the story image decodes.
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) handleNext();
     });
@@ -119,15 +122,15 @@ const StoryViewModal = ({ visible, onClose, stories, initialIndex = 0, onDelete 
                   styles.storyProgressBar,
                   {
                     backgroundColor: "#fff",
-                    width:
-                      i < currentIndex
-                        ? "100%"
-                        : i === currentIndex
-                        ? progress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: ["0%", "100%"],
-                          })
-                        : "0%",
+                    // Grow from the left via scaleX (native-driver friendly)
+                    // instead of animating width (layout â†’ JS thread).
+                    transformOrigin: "left",
+                    transform: [
+                      {
+                        scaleX:
+                          i < currentIndex ? 1 : i === currentIndex ? progress : 0,
+                      },
+                    ],
                   },
                 ]}
               />
@@ -203,7 +206,7 @@ const StoryViewModal = ({ visible, onClose, stories, initialIndex = 0, onDelete 
   );
 };
 
-// ─── Screen ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SocialProfileScreen = ({ navigation }) => {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -222,7 +225,7 @@ const SocialProfileScreen = ({ navigation }) => {
   const loadStories = async () => {
     if (!userId) return;
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const res = await axios.get(STORIES.ENDPOINTS.MINE, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -240,7 +243,7 @@ const SocialProfileScreen = ({ navigation }) => {
     }
     if (!isRefreshing) setLoading(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [mineRes, savedRes] = await Promise.all([
@@ -292,7 +295,7 @@ const SocialProfileScreen = ({ navigation }) => {
         style: "destructive",
         onPress: async () => {
           try {
-            const token = await AsyncStorage.getItem("auth_token");
+            const token = await getToken();
             const res = await axios.delete(STORIES.ENDPOINTS.DELETE(storyId), {
               headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
@@ -350,7 +353,7 @@ const SocialProfileScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
-      {/* Header — back button only */}
+      {/* Header â€” back button only */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}

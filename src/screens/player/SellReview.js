@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -32,7 +33,7 @@ const FIELD_BG = "#F4F4F5";
 // TODO: replace with admin-configured value once that flow exists
 const DELIVERY_FEE = 50;
 
-// Color name → swatch hex
+// Color name â†’ swatch hex
 const COLOR_SWATCHES = {
   Black: "#000000",
   White: "#FFFFFF",
@@ -87,7 +88,7 @@ const SellReview = () => {
   const productPrice = product.isDonation ? 0 : Number(product.askingPrice) || 0;
   const total = productPrice * qty + (product.isDonation ? 0 : DELIVERY_FEE);
 
-  // ─── Submit ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSubmit = async () => {
     if (images.length === 0) {
       Alert.alert(
@@ -98,7 +99,7 @@ const SellReview = () => {
     }
     setSubmitting(true);
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const token = await getToken();
       const fd = new FormData();
 
       // Product fields
@@ -181,7 +182,7 @@ const SellReview = () => {
         <Text style={styles.headerTitle}>Review</Text>
       </View>
 
-      {/* Progress — 100% */}
+      {/* Progress â€” 100% */}
       <View style={styles.progressTrack}>
         <View style={styles.progressFill} />
       </View>
@@ -279,7 +280,7 @@ const SellReview = () => {
             ) : null}
           </View>
 
-          {/* Sold as — single piece vs box/pack */}
+          {/* Sold as â€” single piece vs box/pack */}
           <View style={styles.specRow}>
             <View style={styles.specBox}>
               <Text style={styles.specLabel}>Sold as</Text>
@@ -306,20 +307,20 @@ const SellReview = () => {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Product price</Text>
             <Text style={styles.summaryValue}>
-              {product.isDonation ? "Free" : `₹${productPrice}/-`}
+              {product.isDonation ? "Free" : `â‚¹${productPrice}/-`}
             </Text>
           </View>
           {!product.isDonation && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Delivery fee</Text>
-              <Text style={styles.summaryValue}>₹{DELIVERY_FEE}/-</Text>
+              <Text style={styles.summaryValue}>â‚¹{DELIVERY_FEE}/-</Text>
             </View>
           )}
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>
-              {product.isDonation ? "Free" : `₹${total}/-`}
+              {product.isDonation ? "Free" : `â‚¹${total}/-`}
             </Text>
           </View>
         </View>

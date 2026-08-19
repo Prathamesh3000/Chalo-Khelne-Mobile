@@ -1,3 +1,4 @@
+﻿import { getToken } from "../../services/tokenStore";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -29,8 +30,8 @@ const STATUS_BADGE = {
 
 const fmtMoney = (n) => {
   const v = Number(n) || 0;
-  if (v >= 1000) return `₹${(v / 1000) % 1 === 0 ? v / 1000 : (v / 1000).toFixed(1)}k`;
-  return `₹${v}`;
+  if (v >= 1000) return `â‚¹${(v / 1000) % 1 === 0 ? v / 1000 : (v / 1000).toFixed(1)}k`;
+  return `â‚¹${v}`;
 };
 
 const initials = (name) =>
@@ -54,7 +55,7 @@ const TrainerDashboard = () => {
   const [today, setToday] = useState([]);
   const [recent, setRecent] = useState([]);
 
-  const authHeaders = async () => ({ Authorization: `Bearer ${await AsyncStorage.getItem("auth_token")}` });
+  const authHeaders = async () => ({ Authorization: `Bearer ${await getToken()}` });
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -112,7 +113,7 @@ const TrainerDashboard = () => {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>Good Morning,</Text>
-          <Text style={styles.title}>Trainer 👋</Text>
+          <Text style={styles.title}>Trainer ðŸ‘‹</Text>
         </View>
         <TouchableOpacity
           style={styles.bellBtn}
@@ -208,7 +209,7 @@ const TrainerDashboard = () => {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.sessionTitle}>{s.title}</Text>
                       <Text style={styles.sessionMeta}>
-                        {s.startLabel} · {s.current} players
+                        {s.startLabel} Â· {s.current} players
                       </Text>
                     </View>
                     <View style={[styles.badge, { backgroundColor: badge.bg }]}>
@@ -238,7 +239,7 @@ const TrainerDashboard = () => {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.reqName}>{r.name}</Text>
                     <Text style={styles.reqMeta}>
-                      {r.sport} · {r.type} Training
+                      {r.sport} Â· {r.type} Training
                     </Text>
                   </View>
                   {r.status === "pending" ? (
