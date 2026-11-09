@@ -4,7 +4,21 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { NavigationContainer, useNavigationContainerRef } from "@react-navigation/native";
 
 WebBrowser.maybeCompleteAuthSession();
-import { StatusBar, BackHandler, Platform, ToastAndroid } from "react-native";
+import { BackHandler, Platform, ToastAndroid } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
+import {
+  Montserrat_400Regular,
+  Montserrat_500Medium,
+  Montserrat_600SemiBold,
+  Montserrat_700Bold,
+} from "@expo-google-fonts/montserrat";
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from "@expo-google-fonts/poppins";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppNavigator from "./src/navigation/AppNavigator";
 import DobGate from "./src/components/DobGate";
@@ -53,6 +67,22 @@ const linking = {
 };
 
 function App() {
+  // Every screen styles text with these family names; without loading them the
+  // OS silently falls back to its system font. The lowercase/"Regular" aliases
+  // cover misspelled names still present in a few screens.
+  const [fontsLoaded, fontError] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    Montserrat_500Regular: Montserrat_500Medium,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_400regular: Poppins_400Regular,
+    Poppins_500medium: Poppins_500Medium,
+  });
   const navigationRef = useNavigationContainerRef();
   const lastBackPressRef = useRef(0);
 
@@ -108,6 +138,10 @@ function App() {
     const backHandler = BackHandler.addEventListener("hardwareBackPress", handleBackButton);
     return () => backHandler.remove();
   }, []);
+
+  // Hold the (native) splash until fonts are ready; a load error must not
+  // brick the app, so it falls through to system fonts.
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>

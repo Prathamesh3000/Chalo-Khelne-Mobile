@@ -12,9 +12,13 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import axios from "axios";
+import { buildPostForm, searchPlayers } from "../../api/playerHistory";
 import { useAuth } from "../../context/AuthContext";
 import POSTS from "../../api/posts"; // Import the posts API client
 import TOURNAMENTS from "../../api/tournaments"; // Import the tournaments API client
@@ -45,6 +49,16 @@ const AddPopUpModal = ({
   const [errors, setErrors] = useState({});
   const isSelectingSuggestionRef = useRef(false);
 
+  // Timeline extras: when the match happened, who played, and photos.
+  const MAX_POST_IMAGES = 5;
+  const [eventDate, setEventDate] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [images, setImages] = useState([]);
+  const [taggedPlayers, setTaggedPlayers] = useState([]);
+  const [tagQuery, setTagQuery] = useState("");
+  const [tagResults, setTagResults] = useState([]);
+  const tagSearchSeq = useRef(0);
+
   const navigation = useNavigation()
 
   const [loading, setLoading] = useState(false);
@@ -60,8 +74,63 @@ const AddPopUpModal = ({
         location: "",
         link: "",
       });
+      setEventDate(null);
+      setImages([]);
+      setTaggedPlayers([]);
+      setTagQuery("");
+      setTagResults([]);
     }
   }, [visible]);
+
+  const pickImages = async () => {
+    const room = MAX_POST_IMAGES - images.length;
+    if (room <= 0) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to add photos.");
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: room,
+    });
+    if (res.canceled) return;
+    const picked = (res.assets || []).map((a) => ({
+      uri: a.uri,
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+    }));
+    setImages((prev) => [...prev, ...picked].slice(0, MAX_POST_IMAGES));
+  };
+
+  // Debounce-free but race-safe: only the latest query's results are kept.
+  const handleTagQuery = async (text) => {
+    setTagQuery(text);
+    const seq = ++tagSearchSeq.current;
+    if (text.trim().length < 2) {
+      setTagResults([]);
+      return;
+    }
+    try {
+      const hits = await searchPlayers(text);
+      if (seq === tagSearchSeq.current) {
+        setTagResults(hits.filter((h) => !taggedPlayers.some((t) => t._id === h._id)));
+      }
+    } catch {
+      if (seq === tagSearchSeq.current) setTagResults([]);
+    }
+  };
+
+  const addTagged = (player) => {
+    setTaggedPlayers((prev) => [...prev, player]);
+    setTagQuery("");
+    setTagResults([]);
+  };
+
+  const isoDate = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   // Fetch tournaments when component mounts
   useEffect(() => {
@@ -200,22 +269,49 @@ const AddPopUpModal = ({
         .map((tag) => tag.trim())
         .filter((tag) => tag);
 
-      const response = await axios.post(
-        POSTS.ENDPOINTS.CREATE,
-        {
-          tournamentName: formData.tournamentName,
-          caption: formData.bio,
-          tags: tagsArray,
-          location: formData.location,
-          link: formData.link,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const taggedUserIds = taggedPlayers.map((p) => p._id);
+      const eventDateStr = eventDate ? isoDate(eventDate) : undefined;
+
+      // Photos need multipart; without them keep the original JSON request.
+      const response =
+        images.length > 0
+          ? await axios.post(
+              POSTS.ENDPOINTS.CREATE,
+              buildPostForm({
+                tournamentName: formData.tournamentName,
+                caption: formData.bio,
+                location: formData.location,
+                link: formData.link,
+                eventDate: eventDateStr,
+                tags: tagsArray,
+                taggedUserIds,
+                images,
+              }),
+              {
+                headers: {
+                  Authorization: `Bearer ${authToken}`,
+                  "Content-Type": "multipart/form-data",
+                },
+              }
+            )
+          : await axios.post(
+              POSTS.ENDPOINTS.CREATE,
+              {
+                tournamentName: formData.tournamentName,
+                caption: formData.bio,
+                tags: tagsArray,
+                taggedUserIds,
+                eventDate: eventDateStr,
+                location: formData.location,
+                link: formData.link,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${authToken}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
 
       Alert.alert("Success", "Post created successfully");
 
@@ -326,6 +422,101 @@ const AddPopUpModal = ({
               </View>
             ))}
 
+            {/* When it happened — shown on your history timeline */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.label}>Match / event date</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.dateRow]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={{ color: eventDate ? "#333" : "#666", fontSize: 14 }}>
+                  {eventDate
+                    ? eventDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+                    : "Select date (optional)"}
+                </Text>
+                <MaterialIcons name="event" size={18} color="#666" />
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={eventDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  maximumDate={new Date()}
+                  onChange={(_, d) => {
+                    if (Platform.OS !== "ios") setShowDatePicker(false);
+                    if (d) setEventDate(d);
+                  }}
+                />
+              )}
+              {showDatePicker && Platform.OS === "ios" && (
+                <TouchableOpacity style={styles.dateDone} onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.dateDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Tag the players you played with — they approve it onto their own history */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.label}>Tag players</Text>
+              <TextInput
+                placeholder="Search players by name"
+                placeholderTextColor="#666"
+                style={styles.input}
+                value={tagQuery}
+                onChangeText={handleTagQuery}
+                autoCapitalize="none"
+              />
+              {tagResults.length > 0 && (
+                <View style={styles.tagResults}>
+                  {tagResults.slice(0, 5).map((p) => (
+                    <TouchableOpacity key={p._id} style={styles.suggestionItem} onPress={() => addTagged(p)}>
+                      <Text style={styles.suggestionText}>{p.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {taggedPlayers.length > 0 && (
+                <View style={styles.tagChips}>
+                  {taggedPlayers.map((p) => (
+                    <View key={p._id} style={styles.tagChip}>
+                      <Text style={styles.tagChipText}>{p.name}</Text>
+                      <TouchableOpacity
+                        onPress={() => setTaggedPlayers((prev) => prev.filter((t) => t._id !== p._id))}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <MaterialIcons name="close" size={14} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Photos */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.label}>
+                Photos ({images.length}/{MAX_POST_IMAGES})
+              </Text>
+              <View style={styles.photoGrid}>
+                {images.map((img, i) => (
+                  <View key={img.uri + i} style={styles.photoWrap}>
+                    <Image source={{ uri: img.uri }} style={styles.photo} />
+                    <TouchableOpacity
+                      style={styles.photoRemove}
+                      onPress={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      <MaterialIcons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {images.length < MAX_POST_IMAGES && (
+                  <TouchableOpacity style={[styles.photoWrap, styles.photoAdd]} onPress={pickImages}>
+                    <MaterialIcons name="add" size={26} color="#ff6A00" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             {/* Submit Button */}
             <TouchableOpacity
               style={[styles.submitBtn, loading && styles.disabledBtn]}
@@ -370,7 +561,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
-    // maxHeight: "80%",
+    // The form is longer now (date, tags, photos) — cap it so it scrolls
+    // instead of running off the screen.
+    maxHeight: "88%",
   },
   heading: {
     fontSize: 20,
@@ -448,6 +641,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
     fontStyle: "italic",
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dateDone: { alignSelf: "flex-end", paddingVertical: 6, paddingHorizontal: 12 },
+  dateDoneText: { color: "#ff6A00", fontWeight: "600" },
+  tagResults: {
+    marginTop: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+  },
+  tagChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  tagChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F1F1F1",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  tagChipText: { fontSize: 12, color: "#333", fontWeight: "500" },
+  photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  photoWrap: { width: 70, height: 70, borderRadius: 8 },
+  photo: { width: 70, height: 70, borderRadius: 8, backgroundColor: "#F2F2F2" },
+  photoRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoAdd: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#ff6A00",
+    alignItems: "center",
+    justifyContent: "center",
   },
   errorInput: {
     borderColor: "#FF3B30",

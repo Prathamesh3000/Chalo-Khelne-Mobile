@@ -17,12 +17,16 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RoleSelector from "./RoleSelector";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 
 const { width, height } = Dimensions.get("window");
 
 const RegisterScreen = ({ navigation }) => {
+  // Real status-bar / notch height. The old flat `ios ? 60 : 40` over-padded
+  // notch-less iPhones (SE: 20pt bar) and under-padded tall Android cutouts.
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
@@ -138,7 +142,7 @@ const RegisterScreen = ({ navigation }) => {
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={styles.scrollView}
+            contentContainerStyle={[styles.scrollView, { paddingTop: insets.top + 16 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
@@ -377,7 +381,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flexGrow: 1,
     paddingHorizontal: 25,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    // paddingTop applied inline from useSafeAreaInsets().top
     paddingBottom: 40,
   },
   backButton: {

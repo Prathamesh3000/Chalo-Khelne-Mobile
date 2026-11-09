@@ -52,6 +52,7 @@ export interface AuthContextValue {
   forgotPassword: (email: string) => Promise<any>;
   resetPassword: (data: { email: string; otp: string; newPassword: string }) => Promise<any>;
   googleLogin: (data: any) => Promise<any>;
+  appleLogin: (data: any) => Promise<any>;
   isAuthenticated: boolean;
   isPlayer: boolean;
   isTrainer: boolean;
@@ -87,6 +88,7 @@ const AuthContext = createContext<AuthContextValue>({
   forgotPassword: async () => {},
   resetPassword: async () => {},
   googleLogin: async () => {},
+  appleLogin: async () => {},
   addAccount: async () => ({}) as AuthUser,
   switchAccount: async () => ({}) as AuthUser,
   refreshSessions: async () => {},
@@ -224,13 +226,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
           // Try to fetch fresh user data from server
           try {
-            const response = await fetch(AUTH.ENDPOINTS.CURRENT_USER, {
-              headers: {
-                Authorization: `Bearer ${storedToken}`,
-                "Content-Type": "application/json",
-              },
-              timeout: 10000,
-            } as RequestInit & { timeout?: number });
+            // RN's fetch ignores a `timeout` option, so a stalled socket would
+            // leave isInitializing=true forever. Abort explicitly instead.
+            const controller = new AbortController();
+            const abortTimer = setTimeout(() => controller.abort(), 10000);
+            let response: Response;
+            try {
+              response = await fetch(AUTH.ENDPOINTS.CURRENT_USER, {
+                headers: {
+                  Authorization: `Bearer ${storedToken}`,
+                  "Content-Type": "application/json",
+                },
+                signal: controller.signal,
+              });
+            } finally {
+              clearTimeout(abortTimer);
+            }
 
             if (response.status === 401) {
               // Token rejected by server â€” clear and logout
@@ -494,6 +505,57 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [rememberSession]);
 
+  // Sign in with Apple (iOS only). Deliberately identical to googleLogin
+  // above - same session persistence, same account-switcher wiring, same error
+  // surface, same return shape - only the endpoint and the error label differ.
+  // The server's /auth/apple-login returns the same payload as /google-login.
+  const appleLogin = useCallback(async (data: any) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const responseData = await apiRequest(
+        AUTH.ENDPOINTS.APPLE_LOGIN,
+        "POST",
+        data
+      );
+
+      if (!responseData?.token || !responseData?.user?._id) {
+        throw new Error("Invalid response from server");
+      }
+
+      await Storage.storeToken(responseData.token);
+      if (responseData.refreshToken) await tokenStore.setRefreshToken(responseData.refreshToken);
+      await Storage.storeUser(responseData.user);
+
+      setUser(responseData.user);
+      setToken(responseData.token);
+      // Remember this account in the switcher.
+      await rememberSession({ token: responseData.token, refreshToken: responseData.refreshToken, user: responseData.user });
+
+      // Optional - never block login
+      try {
+        await NotificationService.registerPushTokenForNewUser(
+          responseData.user._id
+        );
+      } catch (e) {
+        console.warn("Push token registration skipped:", e);
+      }
+
+      return responseData;
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err.message ||
+        "Apple login failed";
+
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [rememberSession]);
+
   // Make a remembered account the active one by mirroring its saved token/user
   // into the canonical keys the whole app reads. No network, no re-login â€” the
   // navigator re-renders for the new account's role automatically.
@@ -721,6 +783,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       forgotPassword,
       resetPassword,
       googleLogin,
+      appleLogin,
       isAuthenticated: !!user,
       isPlayer,
       isTrainer,
@@ -751,6 +814,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       forgotPassword,
       resetPassword,
       googleLogin,
+      appleLogin,
       addAccount,
       switchAccount,
       refreshSessions,

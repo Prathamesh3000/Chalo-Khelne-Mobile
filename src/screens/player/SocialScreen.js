@@ -669,6 +669,8 @@ const PostItem = React.memo(
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const heartScale = useRef(new Animated.Value(0)).current;
     const opacityAnim = useRef(new Animated.Value(0)).current;
+    const [photoIndex, setPhotoIndex] = useState(0);
+    const photoUris = (item.images || []).map((p) => assetUrl(p)).filter(Boolean);
 
     const handleLikePress = () => {
       onLike(item._id);
@@ -745,15 +747,51 @@ const PostItem = React.memo(
 
         <TouchableWithoutFeedback onPress={handleTouch}>
           <View style={styles.mediaContainer}>
-            <Image
-              source={
-                item.linkPreview?.image
-                  ? { uri: item.linkPreview.image }
-                  : require("../../../assets/fallback.jpg")
-              }
-              style={styles.postImage}
-              resizeMode="cover"
-            />
+            {photoUris.length > 1 ? (
+              // Several uploaded photos: swipe through them.
+              <ScrollView
+                horizontal
+                pagingEnabled
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.photoPager}
+                onMomentumScrollEnd={(e) =>
+                  setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / (width - 32)))
+                }
+              >
+                {photoUris.map((uri) => (
+                  <Image key={uri} source={{ uri }} style={styles.pagerImage} resizeMode="cover" />
+                ))}
+              </ScrollView>
+            ) : (
+              <Image
+                source={
+                  // An uploaded photo wins over the link's preview image.
+                  photoUris.length
+                    ? { uri: photoUris[0] }
+                    : item.linkPreview?.image
+                    ? { uri: item.linkPreview.image }
+                    : require("../../../assets/fallback.jpg")
+                }
+                style={styles.postImage}
+                resizeMode="cover"
+              />
+            )}
+            {photoUris.length > 1 && (
+              <>
+                <View style={styles.photoCountBadge} pointerEvents="none">
+                  <Ionicons name="images" size={12} color="#fff" />
+                  <Text style={styles.photoCountText}>
+                    {photoIndex + 1}/{photoUris.length}
+                  </Text>
+                </View>
+                <View style={styles.photoDots} pointerEvents="none">
+                  {photoUris.map((uri, i) => (
+                    <View key={uri} style={[styles.photoDot, i === photoIndex && styles.photoDotActive]} />
+                  ))}
+                </View>
+              </>
+            )}
             <View style={styles.playButtonOverlay}>
               <Ionicons name="play" size={24} color="#333" style={{ marginLeft: 3 }} />
             </View>
@@ -1563,6 +1601,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
   },
   postImage: { width: "100%", height: "100%" },
+  photoCountBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  photoCountText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  photoPager: { width: "100%", height: "100%" },
+  pagerImage: { width: width - 32, height: 220 },
+  photoDots: {
+    position: "absolute",
+    bottom: 8,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  photoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.5)" },
+  photoDotActive: { backgroundColor: "#fff" },
   playButtonOverlay: {
     position: "absolute",
     width: 34,

@@ -346,7 +346,7 @@ const BookingConfirmation = ({ route, navigation }) => {
         >
           <View style={styles.receiptHeader}>
             <Image
-              source={require("../../../assets/logo.jpg")} // Replace with your app logo
+              source={require("../../../assets/splash-icon.jpg")}
               style={styles.receiptLogo}
               resizeMode="contain"
             />

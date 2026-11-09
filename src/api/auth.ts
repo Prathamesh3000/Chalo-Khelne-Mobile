@@ -12,6 +12,11 @@ const ENDPOINTS = {
   FORGOT_PASSWORD: `${BASE_URL}/forgot-password`,
   RESET_PASSWORD: `${BASE_URL}/reset-password`,
   GOOGLE_LOGIN: `${BASE_URL}/google-login`,
+  // Sign in with Apple (iOS only) - App Store Guideline 4.8. Mounted next to
+  // /auth/refresh and /auth/logout on the server's auth router.
+  APPLE_LOGIN: `${BASE_URL}/auth/apple-login`,
+  // Permanent, user-initiated account deletion - App Store Guideline 5.1.1(v).
+  DELETE_ACCOUNT: `${BASE_URL}/auth/account`,
   REGISTER_DEVICE: `${BASE_URL}/register-device`,
   REFRESH: `${BASE_URL}/auth/refresh`,
   LOGOUT: `${BASE_URL}/auth/logout`,

@@ -4,12 +4,12 @@
     "slug": "chalo-khelne",
     "version": "1.0.1",
     "orientation": "default",
-    "icon": "./assets/splash-icon.jpg",
+    "icon": "./assets/brand-1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "chalokhelne",
     "splash": {
-      "image": "./assets/splash-icon.jpg",
+      "image": "./assets/brand-1024.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,14 +17,16 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#f4511e"
         }
       ],
       [
-        "expo-media-library",
+        "expo-image-picker",
         {
-          "photosPermission": "Allow Chalo Khelne to save QR codes to your gallery."
+          "photosPermission": "Allow Chalo Khelne to access your photos so you can set a profile picture, add images to posts, and attach payment screenshots.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       "expo-asset",
@@ -37,28 +39,45 @@
             "targetSdkVersion": 35,
             "buildToolsVersion": "35.0.0",
             "usesCleartextTraffic": true
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
           }
         }
       ],
       "expo-font",
-      "@react-native-google-signin/google-signin",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.943646523727-a4cc9tk338qedpa4pn7ehc8v8dbs39al"
+        }
+      ],
+      "expo-apple-authentication",
       "expo-secure-store",
       "@sentry/react-native"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.chalokhelnesport.client",
+      "icon": "./assets/app-icon-1024.png",
       "infoPlist": {
+        "CFBundleDisplayName": "Chalo Khelne",
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocalNetworkUsageDescription": "Chalo Khelne uses your local network to connect to nearby devices on the same Wi-Fi when you are testing an internal build. The App Store version connects over the internet.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSFaceIDUsageDescription": "Allow Chalo Khelne to use Face ID to protect your saved sign-in credentials."
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/splash-icon.jpg",
+        "foregroundImage": "./assets/adaptive-foreground.png",
         "backgroundColor": "#ffffff"
       },
       "intentFilters": [

@@ -99,7 +99,7 @@ const PaymentStatusScreen = ({ navigation, route }) => {
                 tournamentId,
                 tournamentName: tournament?.name || "Tournament",
                 tournamentType: getTournamentType(tournament) || "N/A", // consistent naming
-                paymentAmount: tournament.price || 0,
+                paymentAmount: Number(paymentAmount ?? bookingData?.paymentAmount ?? tournament?.rawData?.tournamentFee ?? tournament?.price ?? 0) || 0,
                 paymentMethod: "cash",
                 selectedCategories: bookingData?.selectedCategories || [], // Include selected categories (legacy)
                 // STEP 14 — Multi-sport: forward both shapes to backend so the

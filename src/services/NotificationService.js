@@ -31,9 +31,15 @@ class NotificationService {
   };
 
   setupNotifications = async () => {
+    // `shouldShowAlert` is deprecated as of expo-notifications 0.32 and is
+    // ignored on iOS. Foreground notifications there are controlled by
+    // `shouldShowBanner` (heads-up banner) and `shouldShowList` (Notification
+    // Centre); both are required. Without them, notifications arriving while
+    // the app is open are delivered silently on iOS.
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
       }),

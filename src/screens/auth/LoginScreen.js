@@ -23,6 +23,7 @@ import {
   isErrorWithCode,
   statusCodes,
 } from "@react-native-google-signin/google-signin";
+import * as AppleAuthentication from "expo-apple-authentication";
 
 const { width, height } = Dimensions.get("window");
 
@@ -34,9 +35,14 @@ const TEXT_DARK = "#1A181B";    // headings / primary text
 const TEXT_MUTED = "#6B7280";   // secondary text, labels, placeholders
 
 // Configure Google Sign-In
-// Replace this with YOUR Web Client ID from Google Cloud Console
+// webClientId  — from Google Cloud Console, "Web application" OAuth client.
+// iosClientId  — from the SAME project, "iOS" OAuth client registered against
+//                bundle ID com.chalokhelnesport.client. iOS will not sign in
+//                without it. Its reversed form must also match `iosUrlScheme`
+//                in app.json.
 GoogleSignin.configure({
   webClientId: "943646523727-8k78ggm2lm9p2ur152k0lhie0ta2a2mb.apps.googleusercontent.com",
+  iosClientId: "943646523727-a4cc9tk338qedpa4pn7ehc8v8dbs39al.apps.googleusercontent.com",
   offlineAccess: false,
   scopes: ["profile", "email"],
 });
@@ -47,8 +53,82 @@ const LoginScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [googleLoading, setGoogleLoading] = useState(false);
-  const { login, googleLogin, loading } = useAuth();
+  const [appleLoading, setAppleLoading] = useState(false);
+  // Sign in with Apple is iOS-only. On Android `appleAvailable` stays false and
+  // nothing Apple-related is ever rendered or called.
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  const { login, googleLogin, appleLogin, loading } = useAuth();
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const available = await AppleAuthentication.isAvailableAsync();
+        if (!cancelled) setAppleAvailable(!!available);
+      } catch (_) {
+        // Older iOS / unsupported device - just don't offer the option.
+        if (!cancelled) setAppleAvailable(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAppleSignIn = async () => {
+    try {
+      setAppleLoading(true);
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      const identityToken = credential?.identityToken;
+      if (!identityToken) {
+        Alert.alert("Error", "Could not get authentication token from Apple.");
+        return;
+      }
+
+      // Apple returns fullName and email ONLY on the very first authorization
+      // of this app for that Apple ID. On every later sign-in they come back
+      // null - that is expected, not a failure. The backend identifies the user
+      // from the identity token's `sub` and uses the name/email it stored the
+      // first time, so we just forward null and carry on.
+      const nameParts = [
+        credential?.fullName?.givenName,
+        credential?.fullName?.familyName,
+      ].filter(Boolean);
+
+      await appleLogin({
+        identityToken,
+        fullName: nameParts.length > 0 ? nameParts.join(" ") : null,
+        email: credential?.email || null,
+        platform: "ios",
+        // Apple requires that deleting an account also revokes its Apple token
+        // (guideline 5.1.1(v)). Revocation needs a refresh token, and the only
+        // way to get one is to exchange this short-lived code at sign-in time —
+        // it cannot be recovered later. The server stores the result; if the
+        // Apple .p8 key is not configured yet it just no-ops.
+        authorizationCode: credential?.authorizationCode || null,
+      });
+    } catch (error) {
+      if (error?.code === "ERR_REQUEST_CANCELED") {
+        // User dismissed the Apple sheet - silent, same as Google's cancel path.
+        return;
+      }
+      Alert.alert(
+        "Apple Sign-In Failed",
+        error.message || "Authentication failed. Please try again."
+      );
+    } finally {
+      setAppleLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     try {
@@ -312,6 +392,41 @@ const LoginScreen = ({ navigation }) => {
               )}
             </TouchableOpacity>
 
+            {/* Sign in with Apple - required by App Store Guideline 4.8
+                because we offer Google sign-in. iOS only; on Android
+                `appleAvailable` is false so nothing below renders. Apple
+                mandates its own button component for branding, so we only
+                size/round it to match the Google button above. */}
+            {Platform.OS === "ios" && appleAvailable && (
+              <View
+                style={[
+                  styles.appleButtonWrap,
+                  (appleLoading || googleLoading || loading) && { opacity: 0.6 },
+                ]}
+                pointerEvents={
+                  appleLoading || googleLoading || loading ? "none" : "auto"
+                }
+              >
+                {appleLoading ? (
+                  <View style={styles.appleButtonBusy}>
+                    <ActivityIndicator color="#333" size="small" />
+                  </View>
+                ) : (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={
+                      AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                    }
+                    buttonStyle={
+                      AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                    }
+                    cornerRadius={16}
+                    style={styles.appleButton}
+                    onPress={handleAppleSignIn}
+                  />
+                )}
+              </View>
+            )}
+
             <View style={styles.footer}>
               <Text style={styles.footerText}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate("Register")}>
@@ -554,6 +669,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#333",
+  },
+  // Visual parity with googleButton: same horizontal inset, same corner
+  // radius, same ~48pt tap target - Apple requires the option be presented as
+  // an equivalent, not a lesser alternative.
+  appleButtonWrap: {
+    marginTop: 12,
+    marginHorizontal: 10,
+  },
+  appleButton: {
+    width: "100%",
+    height: 48,
+  },
+  appleButtonBusy: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 48,
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   footer: {
     flexDirection: "row",

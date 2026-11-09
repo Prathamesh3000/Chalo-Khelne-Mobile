@@ -18,6 +18,8 @@ export interface CategoryRow {
   minAge?: number | null;
   maxAge?: number | null;
   gender?: string;
+  // Play day "YYYY-MM-DD" for multi-day events; null = the whole tournament.
+  date?: string | null;
   type?: string | null;
   groupStageFormat?: string | null;
   knockoutFormat?: string | null;
@@ -72,6 +74,20 @@ export function getSportName(tournament: TournamentLike | null | undefined, spor
 export function getCategories(tournament: TournamentLike | null | undefined, sportId?: SportId): CategoryRow[] {
   const cats = getSportTrack(tournament, sportId)?.categories;
   return Array.isArray(cats) ? cats : [];
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "2026-10-31" → "Sat, 31 Oct"; null when the category has no play day.
+// Parsed as a local calendar date — new Date("2026-10-31") is UTC midnight
+// and would show the previous day in timezones west of UTC.
+export function formatCategoryDay(date?: string | null): string | null {
+  const m = typeof date === "string" ? date.match(/^(\d{4})-(\d{2})-(\d{2})/) : null;
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(d.getTime())) return null;
+  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 // Find one category row by name. Matching is case-insensitive and trimmed

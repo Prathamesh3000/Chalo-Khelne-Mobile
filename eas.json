@@ -11,12 +11,21 @@
                 "buildType": "apk",
                 "credentialsSource": "local"
             },
-            "channel": "development"
+            "ios": {
+                "simulator": true
+            },
+            "channel": "development",
+            "env": {
+                "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+            }
         },
         "local": {
             "distribution": "internal",
             "android": {
                 "buildType": "apk"
+            },
+            "ios": {
+                "simulator": true
             },
             "channel": "preview",
             "env": {
@@ -30,6 +39,9 @@
             "android": {
                 "buildType": "apk"
             },
+            "ios": {
+                "simulator": false
+            },
             "channel": "preview",
             "env": {
                 "EXPO_PUBLIC_ENV": "production",
@@ -42,11 +54,23 @@
                 "buildType": "app-bundle",
                 "autoIncrement": true
             },
+            "ios": {
+                "autoIncrement": true
+            },
             "channel": "production",
             "env": {
                 "EXPO_PUBLIC_ENV": "production",
                 "EXPO_PUBLIC_SERVER_URL": "https://chalokhelne.com",
                 "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+            }
+        }
+    },
+    "submit": {
+        "production": {
+            "ios": {
+                "appleId": "REPLACE-WITH-APPLE-ID-EMAIL",
+                "ascAppId": "REPLACE-WITH-APP-STORE-CONNECT-APP-ID",
+                "appleTeamId": "REPLACE-WITH-APPLE-TEAM-ID"
             }
         }
     }

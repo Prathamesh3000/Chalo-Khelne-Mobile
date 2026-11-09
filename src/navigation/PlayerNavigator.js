@@ -82,6 +82,9 @@ import AddNote from "../screens/player/AddNote";
 import DaySchedule from "../screens/player/DaySchedule";
 import SocialProfile from "../screens/player/SocialProfile";
 import PlayerPublicProfile from "../screens/player/PlayerPublicProfile";
+import AddHistoryScreen from "../screens/player/AddHistoryScreen";
+import HistoryRequestsScreen from "../screens/player/HistoryRequestsScreen";
+import HistorySetupScreen from "../screens/player/HistorySetupScreen";
 import TurfBookingPreview from "../screens/player/TurfBookingPreview";
 import TurfPaymentMethod from "../screens/player/TurfPaymentMethod";
 import CartScreen from "../screens/player/CartScreen";
@@ -143,6 +146,22 @@ const HomeStack = () => {
       <Stack.Screen
         name="PlayerPublicProfile"
         component={PlayerPublicProfile}
+        options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
+      />
+      <Stack.Screen
+        name="AddHistory"
+        component={AddHistoryScreen}
+        options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
+      />
+      <Stack.Screen
+        name="HistoryRequests"
+        component={HistoryRequestsScreen}
+        options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
+      />
+      {/* One-time "build your playing history" prompt (see PlayerHomeScreen) */}
+      <Stack.Screen
+        name="HistorySetup"
+        component={HistorySetupScreen}
         options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
       />
       <Stack.Screen
@@ -490,6 +509,12 @@ const PlayStack = () => {
         component={EditProfileScreen}
         options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
       />
+      {/* EditProfile links to the history form, so it must resolve from here too */}
+      <Stack.Screen
+        name="AddHistory"
+        component={AddHistoryScreen}
+        options={{ headerShown: false, tabBarStyle: { display: 'none' } }}
+      />
       <Stack.Screen
         name="TermsConditionsScreen"
         component={TermsCondition}
@@ -645,6 +670,17 @@ const ProfileStack = () => {
       <Stack.Screen
         name="TournamentHistory"
         component={TournamentHistory}
+        options={{ headerShown: false }}
+      />
+      {/* Playing-history timeline */}
+      <Stack.Screen
+        name="AddHistory"
+        component={AddHistoryScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="HistoryRequests"
+        component={HistoryRequestsScreen}
         options={{ headerShown: false }}
       />
       {/* Service Role screens */}

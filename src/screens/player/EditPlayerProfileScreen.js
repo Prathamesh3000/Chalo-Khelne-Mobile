@@ -146,11 +146,6 @@ const EditPlayerProfileScreen = () => {
   );
   const [email, setEmail] = useState(initialProfile.email || "");
   const [address, setAddress] = useState(initialProfile.address || "");
-  const [achievements, setAchievements] = useState(
-    initialProfile.achievements
-      ? initialProfile.achievements.split(/\n+/).filter((a) => a.trim())
-      : []
-  );
 
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -215,16 +210,6 @@ const EditPlayerProfileScreen = () => {
     }
   };
 
-  // ─── Achievements list ─────────────────────────────────────────────
-  const updateAchievement = (idx, text) =>
-    setAchievements((prev) =>
-      prev.map((a, i) => (i === idx ? text : a))
-    );
-  const removeAchievement = (idx) =>
-    setAchievements((prev) => prev.filter((_, i) => i !== idx));
-  const addAchievement = () =>
-    setAchievements((prev) => [...prev, ""]);
-
   // ─── Save ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!name.trim()) return Alert.alert("Required", "Full name is required.");
@@ -246,10 +231,8 @@ const EditPlayerProfileScreen = () => {
         emergencyContact,
         email,
         address,
-        achievements: achievements
-          .map((a) => a.trim())
-          .filter(Boolean)
-          .join("\n"),
+        // `achievements` is deliberately not sent: it was migrated into the
+        // history timeline and the old text is kept server-side as a backup.
       };
 
       const res = await authFetch(AUTH.ENDPOINTS.USER.PROFILE(userId), {
@@ -397,38 +380,20 @@ const EditPlayerProfileScreen = () => {
             />
           </View>
 
-          {/* Achievements */}
+          {/* Achievements now live on the Playing History timeline */}
           <Text style={styles.sectionHeader}>Achievements</Text>
           <View style={styles.card}>
-            {achievements.map((a, i) => (
-              <View key={i} style={styles.achievementRow}>
-                <View style={styles.achievementField}>
-                  <TextInput
-                    style={styles.achievementInput}
-                    value={a}
-                    onChangeText={(t) => updateAchievement(i, t)}
-                    placeholder="e.g. Gold medal in state level 2021 (Football)"
-                    placeholderTextColor={TEXT_MUTED}
-                    multiline
-                  />
-                </View>
-                <TouchableOpacity
-                  style={styles.achievementDelete}
-                  onPress={() => removeAchievement(i)}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                </TouchableOpacity>
-              </View>
-            ))}
-
+            <Text style={{ color: TEXT_MUTED, fontSize: 13, lineHeight: 19 }}>
+              Achievements are now part of your Playing History, with date, result and photos.
+              Your earlier achievements were moved there.
+            </Text>
             <TouchableOpacity
               style={styles.addAchievementBtn}
-              onPress={addAchievement}
+              onPress={() => navigation.navigate("AddHistory")}
               activeOpacity={0.85}
             >
               <Ionicons name="add" size={18} color={GREEN} />
-              <Text style={styles.addAchievementText}>Add Achievement</Text>
+              <Text style={styles.addAchievementText}>Add to Playing History</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

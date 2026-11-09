@@ -19,6 +19,8 @@ import API from "../../api/api";
 import POSTS from "../../api/posts";
 import PLAYER_STATS from "../../api/playerStats";
 import { assetUrl } from "../../utils/assetUrl";
+import HistoryTimeline from "../../components/HistoryTimeline";
+import { fetchTimelineResult } from "../../api/playerHistory";
 
 const { width } = Dimensions.get("window");
 const COLS = 3;
@@ -58,6 +60,8 @@ const PlayerPublicProfile = ({ route, navigation }) => {
   const [following, setFollowing] = useState(0);
   const [posts, setPosts] = useState([]);
   const [career, setCareer] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyRestricted, setHistoryRestricted] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
 
@@ -68,13 +72,17 @@ const PlayerPublicProfile = ({ route, navigation }) => {
     }
     setLoading(true);
     try {
-      const [statusRes, postsRes, statsRes] = await Promise.all([
+      const [statusRes, postsRes, statsRes, historyEntries] = await Promise.all([
         axios.get(API.ENDPOINTS.FOLLOW.STATUS(userId)),
         axios.get(POSTS.ENDPOINTS.BY_USER(userId)),
         // Career stats are best-effort — a failure here must not blank the
         // whole profile, so swallow it and keep the section hidden.
         axios.get(PLAYER_STATS.ENDPOINTS.CAREER(userId)).catch(() => null),
+        // Same for the history timeline.
+        fetchTimelineResult(userId).catch(() => ({ entries: [], restricted: null })),
       ]);
+      setHistory(historyEntries.entries);
+      setHistoryRestricted(historyEntries.restricted);
 
       const s = statusRes.data || {};
       if (s.user) setProfile((prev) => ({ ...prev, ...s.user }));
@@ -192,6 +200,23 @@ const PlayerPublicProfile = ({ route, navigation }) => {
               </View>
             ))}
           </View>
+        </View>
+      )}
+
+      {history.length > 0 && (
+        <View style={styles.historyCard}>
+          <Text style={styles.careerTitle}>Playing History</Text>
+          <HistoryTimeline entries={history} surface="#F7F8FA" />
+        </View>
+      )}
+      {!!historyRestricted && (
+        <View style={[styles.historyCard, styles.historyLocked]}>
+          <Ionicons name="lock-closed" size={16} color="#6B7280" />
+          <Text style={styles.historyLockedText}>
+            {historyRestricted === "followers"
+              ? `Follow ${name} to see their playing history.`
+              : "This player's history is private."}
+          </Text>
         </View>
       )}
 
@@ -343,6 +368,19 @@ const styles = StyleSheet.create({
   careerCell: { alignItems: "center", flex: 1 },
   careerValue: { fontSize: 18, fontWeight: "800", color: "#1A181B" },
   careerLabel: { fontSize: 11, color: "#645E66", marginTop: 3 },
+
+  historyCard: {
+    marginTop: 16,
+    backgroundColor: "#F7F8FA",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+
+  historyLocked: { flexDirection: "row", alignItems: "center", gap: 8 },
+  historyLockedText: { flex: 1, fontSize: 13, color: "#6B7280" },
 
   gridTitle: {
     marginTop: 18,

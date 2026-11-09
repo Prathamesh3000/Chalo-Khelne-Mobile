@@ -27,6 +27,7 @@ import AUTH from "../../api/auth";
 import POSTS from "../../api/posts";
 import PLAYER_STATS from "../../api/playerStats";
 import { authFetch } from "../../api/authFetch";
+import { fetchPending } from "../../api/playerHistory";
 
 const GREEN = "#15A765";
 const GREEN_DARK = "#0F8A55";
@@ -75,6 +76,18 @@ const PlayerProfileScreen = () => {
   const [postsCount, setPostsCount] = useState(0);
   const [careerStats, setCareerStats] = useState(null);
   const [activeSport, setActiveSport] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  // The timeline lives on My Career now; the profile only shows a badge when
+  // tagged posts are waiting for approval. Best-effort: never blank the profile.
+  const fetchPendingCount = async () => {
+    try {
+      setPendingCount((await fetchPending()).length);
+    } catch (e) {
+      console.warn("Pending history fetch failed:", e?.message);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -135,6 +148,7 @@ const PlayerProfileScreen = () => {
       fetchProfile();
       fetchPostsCount();
       fetchCareerStats();
+      fetchPendingCount();
     }, [])
   );
 
@@ -143,6 +157,7 @@ const PlayerProfileScreen = () => {
     fetchProfile();
     fetchPostsCount();
     fetchCareerStats();
+    fetchPendingCount();
   }, []);
 
   if (loading) {
@@ -174,11 +189,6 @@ const PlayerProfileScreen = () => {
       : [];
   const currentRole = profile.role || userRoles[0] || "Player";
 
-  const achievements = (profile.achievements || "")
-    .split(/\n+/)
-    .map((a) => a.trim())
-    .filter(Boolean);
-
   // Real performance â€” derived from /api/player-stats/:userId aggregation
   const sportStats = careerStats?.sportStats || [];
   const sportNames = sportStats.map((s) => s.sport);
@@ -208,6 +218,77 @@ const PlayerProfileScreen = () => {
       { text: "Cancel", style: "cancel" },
       { text: "Log Out", style: "destructive", onPress: () => logout() },
     ]);
+  };
+
+  // --- Account deletion (App Store Guideline 5.1.1(v)) -----------------------
+  // Two separate confirmations before anything is sent: a single tap can never
+  // delete an account. Step 2 spells out that this is permanent deletion, not
+  // deactivation, and lists what is lost.
+
+  const performAccountDeletion = async () => {
+    if (deletingAccount) return;
+    try {
+      setDeletingAccount(true);
+      const res = await authFetch(AUTH.ENDPOINTS.DELETE_ACCOUNT, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+
+      if (!res.ok) {
+        let message = `Server error: ${res.status}`;
+        try {
+          const data = await res.json();
+          message = data?.error || data?.message || message;
+        } catch (_) {}
+        throw new Error(message);
+      }
+
+      // Session teardown is logout()'s job - reuse it so the token store, the
+      // remembered-account list and the global axios auth header are all
+      // cleared exactly the same way as a normal sign-out.
+      await logout();
+    } catch (e) {
+      Alert.alert(
+        "Could Not Delete Account",
+        `${e?.message || "Something went wrong. Please try again."}\n\nYour account has NOT been deleted and you are still signed in.`
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const confirmAccountDeletion = () => {
+    Alert.alert(
+      "Permanently Delete Account?",
+      "Your Chalo Khelne account will be permanently DELETED - not deactivated, not hidden, not paused.\n\nYou will permanently lose:\n- Your profile and personal details\n- Your match history, career timeline and stats\n- Your posts, photos and comments\n- Your bookings, tournament entries and team memberships\n- Any additional roles (Trainer, Referee, Manager) on this account\n\nThis cannot be undone and we cannot restore it for you.",
+      [
+        { text: "Keep My Account", style: "cancel" },
+        {
+          text: "Delete Permanently",
+          style: "destructive",
+          onPress: performAccountDeletion,
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    if (deletingAccount) return;
+    Alert.alert(
+      "Delete My Account",
+      "This permanently deletes your Chalo Khelne account and everything in it. It cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: confirmAccountDeletion,
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -423,6 +504,29 @@ const PlayerProfileScreen = () => {
           )}
         </View>
 
+        {/* My Career: the playing-history timeline lives there */}
+        <TouchableOpacity
+          style={styles.careerLink}
+          onPress={() => navigation.navigate("TournamentHistory")}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="My Career"
+        >
+          <View style={styles.careerLinkIcon}>
+            <Ionicons name="trophy-outline" size={20} color={GREEN} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.careerLinkTitle}>My Career</Text>
+            <Text style={styles.careerLinkSub}>Playing history, stats & rankings</Text>
+          </View>
+          {pendingCount > 0 && (
+            <View style={styles.careerBadge}>
+              <Text style={styles.careerBadgeText}>{pendingCount}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward" size={18} color={TEXT_MUTED} />
+        </TouchableOpacity>
+
         {/* Basic Details card */}
         <View style={styles.detailsCard}>
           <Text style={styles.detailsTitle}>Basic Details</Text>
@@ -451,25 +555,6 @@ const PlayerProfileScreen = () => {
           <DetailRow label="Email:" value={profile.email} />
           <DetailRow label="Address:" value={profile.address} />
 
-          <View style={styles.detailsDivider} />
-
-          <Text style={styles.detailsSection}>Achievements</Text>
-          {achievements.length > 0 ? (
-            achievements.map((a, i) => (
-              <View key={`${a}-${i}`} style={styles.achievementRow}>
-                <View style={styles.achievementIcon}>
-                  <Ionicons name="medal" size={14} color={ORANGE} />
-                </View>
-                <Text style={styles.achievementText}>{a}</Text>
-              </View>
-            ))
-          ) : (
-            <Text
-              style={[styles.detailValue, { textAlign: "left", marginTop: 4 }]}
-            >
-              No achievements added yet.
-            </Text>
-          )}
         </View>
 
         {/* Switch account (player â‡„ school coach) */}
@@ -491,6 +576,32 @@ const PlayerProfileScreen = () => {
           <Ionicons name="log-out-outline" size={18} color="#EF4444" />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
+
+        {/* Delete account - App Store Guideline 5.1.1(v) requires an in-app
+            way to start permanent account deletion. Marked danger so it reads
+            as clearly distinct from the ordinary Log Out above. */}
+        <TouchableOpacity
+          style={[styles.deleteAccountBtn, deletingAccount && styles.deleteAccountBtnBusy]}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+          activeOpacity={0.85}
+        >
+          {deletingAccount ? (
+            <>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.deleteAccountText}>Deleting Account...</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.deleteAccountText}>Delete My Account</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.deleteAccountHint}>
+          Permanently deletes your account and all of your data. This cannot be
+          undone.
+        </Text>
       </ScrollView>
 
       <AccountSwitcher visible={switcherOpen} onClose={() => setSwitcherOpen(false)} />
@@ -795,6 +906,36 @@ const styles = StyleSheet.create({
     color: TEXT_DARK,
     marginBottom: 10,
   },
+  careerLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+    backgroundColor: FIELD_BG,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  careerLinkIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#E7F6EE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  careerLinkTitle: { fontSize: 15, fontFamily: "Montserrat_600SemiBold", color: TEXT_DARK },
+  careerLinkSub: { fontSize: 12, fontFamily: "Montserrat_500Medium", color: TEXT_MUTED, marginTop: 2 },
+  careerBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: ORANGE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  careerBadgeText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Montserrat_700Bold" },
   detailsSection: {
     fontSize: 15,
     fontFamily: "Montserrat_600SemiBold",
@@ -883,6 +1024,38 @@ const styles = StyleSheet.create({
     fontFamily: "Montserrat_600SemiBold",
     fontWeight: "700",
     color: "#EF4444",
+  },
+
+  deleteAccountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#B91C1C",
+    backgroundColor: "#DC2626",
+  },
+  deleteAccountBtnBusy: {
+    opacity: 0.6,
+  },
+  deleteAccountText: {
+    fontSize: 14,
+    fontFamily: "Montserrat_600SemiBold",
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  deleteAccountHint: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    fontSize: 11,
+    fontFamily: "Poppins_400Regular",
+    color: TEXT_MUTED,
+    textAlign: "center",
+    lineHeight: 16,
   },
 });
 

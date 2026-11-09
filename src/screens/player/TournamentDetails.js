@@ -27,7 +27,7 @@ import axios from "axios";
 import TournamentConfig from "../../api/tournaments";
 import { useAuth } from "../../context/AuthContext";
 import Website_SERVER_URL from "../../api/api";
-import { getSportName } from "../../utils/sportTrack";
+import { getSportName, formatCategoryDay } from "../../utils/sportTrack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DOBGateModal from "./DOBGateModal";
@@ -213,6 +213,8 @@ const TournamentDetails = ({ route, navigation }) => {
             _id: String(c._id || c.id || `${s.sportId}-${c.name}`),
             name: c.name || c.categoryName || c.title,
             fee: c.fee ?? c.amount ?? 0,
+            // Play day for multi-day events ("Sat, 31 Oct"); null = all days.
+            day: formatCategoryDay(c.date),
             // Per-category format — used to group rows under Format headings
             // in the new design. Falls back to the tournament-level format if
             // no per-category field is present.
@@ -685,7 +687,15 @@ const TournamentDetails = ({ route, navigation }) => {
                         <View style={styles.formatTable}>
                           {fmt.categories.map((cat) => (
                             <View key={cat._id} style={styles.catRow}>
-                              <Text style={styles.catRowName}>{cat.name}</Text>
+                              <View style={styles.catRowInfo}>
+                                <Text style={styles.catRowName}>{cat.name}</Text>
+                                {cat.day && (
+                                  <View style={styles.catRowDay}>
+                                    <Ionicons name="calendar-outline" size={11} color="#6B7280" />
+                                    <Text style={styles.catRowDayText}>{cat.day}</Text>
+                                  </View>
+                                )}
+                              </View>
                               <Text style={styles.catRowFee}>₹{cat.fee}/-</Text>
                             </View>
                           ))}
@@ -880,6 +890,7 @@ const TournamentDetails = ({ route, navigation }) => {
                               {Number(cat.fee || 0) === 0
                                 ? "Free entry"
                                 : `Registration: ₹${cat.fee}`}
+                              {cat.day ? `  ·  ${cat.day}` : ""}
                             </Text>
                           </View>
                         </View>
@@ -1247,10 +1258,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(0,0,0,0.04)",
   },
+  catRowInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
   catRowName: {
     fontSize: 13,
     fontFamily: "Poppins_400Regular",
     color: "#1A181B",
+  },
+  catRowDay: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  catRowDayText: {
+    fontSize: 11,
+    fontFamily: "Poppins_400Regular",
+    color: "#6B7280",
+    marginLeft: 4,
   },
   catRowFee: {
     fontSize: 13,

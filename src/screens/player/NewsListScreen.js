@@ -177,6 +177,18 @@ const NewsListScreen = () => {
   // ─── Render ────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={24} color={TEXT_DARK} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>News</Text>
+      </View>
       <ScrollView
         contentContainerStyle={{
           paddingBottom: 40 + insets.bottom,
@@ -295,6 +307,16 @@ const TREND_W = width * 0.62;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  backBtn: { padding: 4, marginLeft: -4 },
+  headerTitle: { fontSize: 20, fontWeight: "800", color: TEXT_DARK },
   center: { padding: 40, alignItems: "center", justifyContent: "center" },
 
   // Search

@@ -24,7 +24,7 @@ import {
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { getSportName } from "../../utils/sportTrack";
+import { getSportName, formatCategoryDay } from "../../utils/sportTrack";
 import { useAuth } from "../../context/AuthContext";
 import { eligibilityFor } from "../../utils/eligibility";
 
@@ -155,9 +155,11 @@ export default function TournamentBookingWizard({ route, navigation }) {
             minAge: c.minAge ?? null,
             maxAge: c.maxAge ?? null,
             gender: c.gender || "any",
+            day: formatCategoryDay(c.date),
           });
         }
         const entry = byName.get(key);
+        if (!entry.day) entry.day = formatCategoryDay(c.date);
         entry.availableInFormats.push(fmt.sportEntryId);
         // bump display fee if this format has a higher one (cosmetic)
         const f = c.fee ?? c.amount ?? 0;
@@ -592,6 +594,9 @@ function CategoryStep({ categories, selected, onToggle, totalFee, user, tourname
                   <Text style={styles.choiceSubtitleDisabled}>
                     {reason}
                   </Text>
+                  {cat.day && (
+                    <Text style={styles.choiceDayDisabled}>Played on {cat.day}</Text>
+                  )}
                 </View>
               </View>
             );
@@ -614,6 +619,12 @@ function CategoryStep({ categories, selected, onToggle, totalFee, user, tourname
                 <Text style={styles.choiceSubtitle}>
                   {isFree ? "Free entry" : `Registration: ₹${cat.fee}`}
                 </Text>
+                {cat.day && (
+                  <View style={styles.choiceDayRow}>
+                    <Ionicons name="calendar-outline" size={11} color="#6B7280" />
+                    <Text style={styles.choiceDay}>Played on {cat.day}</Text>
+                  </View>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -807,6 +818,22 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 2,
     fontWeight: "500",
+  },
+  choiceDayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 3,
+  },
+  choiceDay: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  choiceDayDisabled: {
+    fontSize: 11,
+    color: "#9AA0A6",
+    marginTop: 2,
   },
 
   radio: {

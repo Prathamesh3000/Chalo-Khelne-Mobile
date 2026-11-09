@@ -15,7 +15,6 @@ import {
   Alert,
   ActivityIndicator,
   Share,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
@@ -35,6 +34,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Website_SERVER_URL from "../../api/api";
 import { useNotifications } from "../../context/NotificationContext";
 import { authFetch } from "../../api/authFetch";
+import useHistorySetupPrompt from "../../hooks/useHistorySetupPrompt";
 
 const SPORTS_LIST = [
   { name: "Basketball", icon: require("../../../assets/Basketball.png") },
@@ -145,6 +145,9 @@ const PlayerHomeScreen = () => {
     fetchTurfs();
     fetchPosts();
   }, []);
+
+  // First visit with no playing history → offer to build the timeline once.
+  useHistorySetupPrompt(navigation, user?.id || user?._id);
 
   const fetchFreshUserData = async () => {
     try {
@@ -1149,7 +1152,7 @@ const PlayerHomeScreen = () => {
           { transform: [{ translateX: notificationPanelX }] },
         ]}
       >
-        <View style={styles.notificationHeader}>
+        <View style={[styles.notificationHeader, { paddingTop: insets.top + 16 }]}>
           <Text style={styles.notificationTitle}>Notifications</Text>
           <View style={styles.notificationActions}>
             {notifications.length > 0 && (
@@ -1237,7 +1240,7 @@ const PlayerHomeScreen = () => {
               end={{ x: 1, y: 1 }}
               style={styles.sidebarGradient}
             >
-              <View style={styles.sidebarInner}>
+              <View style={[styles.sidebarInner, { paddingTop: insets.top + 6 }]}>
                 {/* Top row: language + close */}
                 <View style={styles.sidebarTopRow}>
                   <TouchableOpacity
@@ -1411,7 +1414,7 @@ const styles = StyleSheet.create({
   },
   sidebarInner: {
     flex: 1,
-    paddingTop: Platform.OS === "ios" ? 50 : 30,
+    // paddingTop inline from insets.top
     paddingHorizontal: 20,
     paddingBottom: 24,
   },
@@ -1871,7 +1874,7 @@ const styles = StyleSheet.create({
   },
   notificationHeader: {
     padding: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    // paddingTop inline from insets.top
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
     flexDirection: "row",

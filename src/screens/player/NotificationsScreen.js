@@ -25,6 +25,7 @@ const TYPE_CONFIG = {
   chat_message: { icon: "chatbubble", color: "#8B5CF6", bg: "#F5F3FF", label: "Message" },
   invitation_received: { icon: "mail", color: "#4F46E5", bg: "#EEF2FF", label: "Invitation" },
   invitation_accepted: { icon: "people", color: "#10B981", bg: "#ECFDF5", label: "Invite Accepted" },
+  history_tag: { icon: "time", color: "#15A765", bg: "#E7F6EE", label: "History Request" },
   general: { icon: "megaphone", color: "#6B7280", bg: "#F9FAFB", label: "Announcement" },
 };
 
@@ -93,6 +94,10 @@ export default function NotificationsScreen() {
       case "invitation_received":
       case "invitation_accepted":
         navigation.navigate("Profile", { screen: "Invitations" });
+        break;
+      case "history_tag":
+        // Tagged in a post — approve or reject it onto the timeline.
+        navigation.navigate("HistoryRequests");
         break;
       default:
         break;

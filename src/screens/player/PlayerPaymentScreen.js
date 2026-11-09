@@ -38,7 +38,7 @@ const QRPaymentScreen = ({ navigation, route }) => {
     managerId = null,
     bookingId = null,
     paymentMethod = "Online",
-    amount = bookingData?.paymentAmount || "45",
+    amount = bookingData?.paymentAmount ?? bookingData?.totalFee ?? 0,
     tournamentName = tournament?.name || "City Championship 2024",
   } = route.params || {};
 

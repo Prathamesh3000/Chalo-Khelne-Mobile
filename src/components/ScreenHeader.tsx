@@ -1,7 +1,8 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -29,9 +30,14 @@ export default function ScreenHeader({
   titleColor = "#1F2937",
 }: ScreenHeaderProps) {
   const navigation = useNavigation();
+  // `insets.top` is the real status-bar / notch / Dynamic Island height on both
+  // platforms. The previous flat `8` on iOS put this header under the notch,
+  // and `StatusBar.currentHeight` is unreliable on Android under edge-to-edge
+  // (forced from targetSdk 35).
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { backgroundColor: bgColor }]}>
+    <View style={[styles.container, { backgroundColor: bgColor, paddingTop: insets.top + 8 }]}>
       <View style={styles.inner}>
         {showBack && (
           <TouchableOpacity
@@ -68,7 +74,7 @@ export default function ScreenHeader({
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 8 : 8,
+    // paddingTop is applied inline from useSafeAreaInsets().top
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },

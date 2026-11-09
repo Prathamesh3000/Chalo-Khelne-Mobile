@@ -5,7 +5,7 @@ import { NativeModules } from "react-native";
 // LOCAL auto-detects the LAN IP from the Metro bundle URL (so it matches the
 // machine running expo start without manual IP edits); falls back to the
 // last-known IP below if detection isn't available.
-const DEV_FALLBACK_IP = "192.168.1.87";
+const DEV_FALLBACK_IP = "192.168.1.47";
 function detectDevHost(): string {
   try {
     const scriptURL: string = (NativeModules as { SourceCode?: { scriptURL?: string } })?.SourceCode?.scriptURL || "";

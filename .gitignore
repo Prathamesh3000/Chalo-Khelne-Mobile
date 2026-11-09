@@ -9,33 +9,66 @@ dist/
 web-build/
 expo-env.d.ts
 
+# ── Environment ───────────────────────────────────────────────────────
+# Blanket-ignore every .env variant, then re-admit the committed template.
+# The previous rules were `.env` + `.env*.local`, which left `.env.production`
+# and `.env.staging` fully trackable. EXPO_PUBLIC_* vars are inlined into the
+# app bundle, so a committed .env leaks whatever is in it to every installed APK.
 .env
+.env.*
+!.env.example
 
-# Native
-*.orig.*
+# ── Signing credentials (NEVER commit) ────────────────────────────────
+# `credentials.json` holds the release keystore password, key alias and key
+# password in plaintext; eas.json's development profile reads it via
+# `credentialsSource: "local"`, so it must exist on disk but never in git.
+#
+# NOTE: a .gitignore rule does NOT untrack a file that is already tracked.
+# This file was committed before the rule existed and stayed in the index and
+# in history regardless. If you add a secret here, also run:
+#   git rm --cached <file>
+credentials.json
+credentials/
+
+# Keystores and provisioning profiles, whatever they are named.
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.pem
+
+# Firebase / Google service configs — these carry project API keys.
+google-services.json
+GoogleService-Info.plist
+
+# Native
+*.orig.*
 
 # Metro
 .metro-health-check*
 
-# debug
+# debug / logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# signing credentials
-credentials.json
+*.log
+logs/
 
 # typescript
 *.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

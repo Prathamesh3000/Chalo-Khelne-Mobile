@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import EmptyState from "../../components/EmptyState";
 import {
   View,
   Text,
@@ -27,7 +28,7 @@ import { getSportPlayMode } from '../../utils/bookingFieldConfig';
 
 const { width } = Dimensions.get('window');
 
-const BookingScreen = ({ route }) => {
+const BookingScreenContent = ({ route }) => {
   // STEP 12b — Multi-sport: route.params now also carries sportSelections.
   // selectedCategory is the existing legacy shape (used by the review UI
   // here); sportSelections is the new authoritative shape for the API.
@@ -36,7 +37,7 @@ const BookingScreen = ({ route }) => {
     selectedCategory,
     sportSelections: sportSelectionsParam,
     employeeId: passedEmployeeId,
-  } = route.params;
+  } = route.params || {};
   // When sportSelections wasn't sent (legacy entry points), derive from
   // selectedCategory so the API submit always has a consistent shape.
   const sportSelections = Array.isArray(sportSelectionsParam) && sportSelectionsParam.length > 0
@@ -986,5 +987,28 @@ const styles = StyleSheet.create({
   selectChipText: { fontSize: 13, fontWeight: '700', color: '#78909C' },
   selectChipTextActive: { color: '#FF6A00' },
 });
+
+// Deep links / notification taps / restored nav state can open this screen with
+// no params; show a way back instead of crashing on `tournament.rawData`.
+const BookingScreen = (props) => {
+  if (!props.route?.params?.tournament) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#fff", justifyContent: "center" }}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Booking unavailable"
+          subtitle="We couldn't load this tournament. Open it again from the Events list."
+        />
+        <TouchableOpacity
+          onPress={() => props.navigation.goBack()}
+          style={{ alignSelf: "center", paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10, backgroundColor: "#15A765" }}
+        >
+          <Text style={{ color: "#fff", fontFamily: "Montserrat_600SemiBold" }}>Go back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  return <BookingScreenContent {...props} />;
+};
 
 export default BookingScreen;

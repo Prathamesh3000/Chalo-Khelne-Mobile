@@ -71,6 +71,9 @@ const formatTimeAgo = (dateString) => {
 
 // 1. Comment Modal
 const CommentModal = ({ visible, onClose, post, onAddComment, isAuthenticated, promptSignIn }) => {
+  // Clears the iPhone home indicator. `Math.max` rather than `bottom + 15`
+  // so Android 3-button nav (inset ~48) does not get double spacing.
+  const insets = useSafeAreaInsets();
   const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
@@ -129,7 +132,7 @@ const CommentModal = ({ visible, onClose, post, onAddComment, isAuthenticated, p
             }
           />
 
-          <View style={styles.commentInputContainer}>
+          <View style={[styles.commentInputContainer, { paddingBottom: Math.max(insets.bottom, 15) }]}>
             <TextInput
               ref={inputRef}
               style={styles.commentInput}
@@ -904,7 +907,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 15,
-    paddingBottom: Platform.OS === "ios" ? 35 : 15,
+    // paddingBottom inline from insets.bottom
     borderTopWidth: 1,
     borderTopColor: "#F0F0F0",
   },

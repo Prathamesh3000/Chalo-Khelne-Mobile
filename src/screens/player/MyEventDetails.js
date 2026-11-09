@@ -12,6 +12,7 @@ import {
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { getSportName } from "../../utils/sportTrack";
+import { assetUrl } from "../../utils/assetUrl";
 
 const MyEventDetailsScreen = () => {
   const navigation = useNavigation();
@@ -31,8 +32,15 @@ const MyEventDetailsScreen = () => {
     startTime: tournament.selectedTime?.startTime || "TBA",
     status: (bookingData.status || "pending").charAt(0).toUpperCase() + (bookingData.status || "pending").slice(1),
     venue: Array.isArray(tournament.eventLocation) ? tournament.eventLocation[0] : (tournament.eventLocation || "TBA"),
+    // Resolve through assetUrl so the logo follows the configured server, the
+    // way every other screen does it (Event, PlayerHomeScreen, viewer Home).
+    // This used to hardcode https://chalo-khelne-backend.onrender.com — an old
+    // host that survived the move to the env-driven base URL, so this screen
+    // kept pointing at a decommissioned backend regardless of the build's
+    // environment. It also skipped the "tournaments/" prefix the other screens
+    // use, so the path shape was wrong too.
     imageUrl: tournament.tournamentLogo
-      ? `https://chalo-khelne-backend.onrender.com/${tournament.tournamentLogo.replace(/\\/g, "/")}`
+      ? assetUrl("tournaments/" + tournament.tournamentLogo)
       : "https://images.unsplash.com/photo-1609710228159-0fa9bd7c0827?q=80&w=1470&auto=format&fit=crop",
     description: tournament.description || "No description available.",
     organizer: tournament.organizerName || "TBA",

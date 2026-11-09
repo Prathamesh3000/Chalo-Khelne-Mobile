@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, TextInput, Modal, ScrollView,
-  StyleSheet, ActivityIndicator, RefreshControl, Alert, Platform,
+  StyleSheet, ActivityIndicator, RefreshControl, Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,6 +12,8 @@ import groupChatApi from "../../api/groupChat";
 import API from "../../api/api";
 
 export default function GroupChatListScreen({ navigation }) {
+  // Custom header (no SafeAreaView here) — needs the real top inset.
+  const insets = useSafeAreaInsets();
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -158,7 +161,7 @@ export default function GroupChatListScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 26 }]}>
         <Text style={styles.headerTitle}>Group Chats</Text>
         <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)}>
           <Ionicons name="add" size={22} color="#FFF" />
@@ -297,7 +300,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F7FA" },
   header: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 20, paddingTop: Platform.OS === "ios" ? 60 : 50, paddingBottom: 16,
+    paddingHorizontal: 20, paddingBottom: 16, // paddingTop inline from insets.top
     backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E5E7EB",
   },
   headerTitle: { fontSize: 22, fontWeight: "900", color: "#1F2937" },
